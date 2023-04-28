@@ -56,6 +56,7 @@ start,end = get_start_and_end_time_data("SI")
 df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start,end=end)
 
 df_SI_min = connection.get_imbalance_prices_per_min()
+df_SI_current = connection.get_current_system_imbalance()
 ####################################################
 #System load
 #####################################################
