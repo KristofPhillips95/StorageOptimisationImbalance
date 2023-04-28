@@ -25,7 +25,7 @@ def get_start_and_end_time_data(attr):
         delta = dt.timedelta(hours=72)
         end = dt.datetime.now() + dt.timedelta(hours=24)
         start = end - delta
-    elif attr in ["ARC"]:
+    elif attr in ["ARC","net_pos_DA"]:
         delta = dt.timedelta(hours=72)
         end = dt.datetime.now() + dt.timedelta(hours=48)
         start = end - delta
@@ -97,6 +97,7 @@ def aggregate_renewables(df_raw,res_type):
     Converts raw elia dataframes with renewable production and forecast to usable dataframes
     output: separated dataframes for past context (= actual realizations of renewable production) and future context (=11am DA RES forecast)
     """
+    #TODO: for past context, use difference of actual vs. forecast RES output?
 
     def  get_value_column(df_filt,col,res_type):
         """
@@ -149,6 +150,30 @@ def aggregate_renewables(df_raw,res_type):
 
     return df_past,df_fut
 
+def complement_SI(df_qh,df_min):
+    df_qh.reset_index(inplace=True)
+    df_min.reset_index(inplace=True)
+
+    now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
+    last_known_qh = df_qh.loc[df_qh['datetime'].idxmax()]['datetime']
+    current_qh = last_known_qh + dt.timedelta(minutes=15)
+
+    min_filt=df_min.loc[df_min['datetime']>=current_qh]['systemimbalance'].tolist()
+
+    n_elements = len(min_filt)
+    trend = (min_filt[-1]-min_filt[0])/(n_elements-1)
+
+    for i in range(15-n_elements):
+        min_filt.append(min_filt[-1]+trend)
+
+    est_SI_current = sum(min_filt)/len(min_filt)
+
+    #TODO: add a new row to df_qh with the newly calculated estimated SI
+
+    return df_qh
+
+
+
 ######################
 #Create connection object
 ######################
@@ -164,6 +189,9 @@ start,end = get_start_and_end_time_data("CBF")
 df_CB = connection.get_cross_border_flows_per_quarter_hour(start = start,end=end)
 print(f"Time spent for CB equals {time.time()-timer}")
 
+start,end = get_start_and_end_time_data("net_pos_DA")
+df_net_pos = connection.get_DA_net_pos(start=start,end=end)
+
 ####################################################
 #Conventional generation forecast by fuel type
 #####################################################
@@ -178,6 +206,8 @@ start,end = get_start_and_end_time_data("SI")
 df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start,end=end)
 
 df_SI_min = connection.get_imbalance_prices_per_min()
+
+df_SI_quarter = complement_SI(df_qh=df_SI_quarter,df_min=df_SI_min)
 
 ####################################################
 #System load
