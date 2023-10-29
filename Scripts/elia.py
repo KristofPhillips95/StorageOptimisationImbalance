@@ -74,6 +74,19 @@ class EliaPandasClient:
         df = self._process_results(df)
         return df
 
+    def get_DA_net_pos(
+            self,
+            start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
+            end: dt.datetime | dt.date | pd.Timestamp = TODAY,
+            **params) -> pd.DataFrame:
+        """Returns raw dataframe of ARC merit order by volume level of 100MW."""
+        dataset="ods023"
+        where_filter = self._construct_where_filter(**locals())
+        params.update({"where": where_filter})
+        df = self._execute_query(dataset, params)
+        df = self._process_results(df)
+        return df
+
 
 
     @split_along_time("5D")

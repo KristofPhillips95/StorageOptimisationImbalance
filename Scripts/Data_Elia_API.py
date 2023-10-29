@@ -12,6 +12,76 @@ import pytz
 #Helper Methods
 ###################
 
+
+def get_dataframes(list_data,start,end):
+
+    list_df = []
+
+    for i,datapoint in enumerate(list_data):
+
+        df = get_specific_df(datapoint,start,end)
+        list_df.append(df)
+        if i == 0:
+            df_all = df
+        else:
+            df_all = df_all.merge(df,on='datetime')
+
+    return df_all
+
+def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60)):
+    #TODO: check why buffer necessary
+    #TODO: check correctness of data
+
+    def filter_df_time(df,start,end):
+        df = df[(df['datetime'] <= end) & (df['datetime'] >= start)]
+        return df
+
+
+    if datapoint == 'RT_wind':
+        df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        df, _ = aggregate_renewables(df_raw=df_wind, res_type='wind')
+        df.rename(columns={'realtime': datapoint},inplace=True)
+
+    elif datapoint == 'RT_pv':
+        df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        df, _ = aggregate_renewables(df_raw=df_solar, res_type='solar')
+        df.rename(columns={'realtime': datapoint},inplace=True)
+
+    elif datapoint == 'RT_SI':
+        df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start-buffer, end=end+buffer)
+        df_SI_min = connection.get_imbalance_prices_per_min()
+        df = complement_SI(df_qh=df_SI_quarter, df_min=df_SI_min)
+        df.rename(columns={'systemimbalance': datapoint},inplace=True)
+
+    elif datapoint == 'DA_F_wind':
+        df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        _, df = aggregate_renewables(df_raw=df_wind, res_type='wind')
+        df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
+
+    elif datapoint == 'DA_F_pv':
+        df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        _, df = aggregate_renewables(df_raw=df_solar, res_type='solar')
+        df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
+
+    elif datapoint == 'DA_F_nuclear':
+        df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
+        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NU'])
+        df.rename(columns={'NU': datapoint},inplace=True)
+
+    elif datapoint == 'DA_F_gas':
+        df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
+        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NG'])
+        df.rename(columns={'NG': datapoint},inplace=True)
+
+    else:
+        sys.exit('Datapoint has not been integrated.')
+
+
+
+    df = filter_df_time(df,start,end)
+
+    return df
+
 def get_start_and_end_time_data(attr):
     if attr in ["SI","CBF"]:
         delta = dt.timedelta(hours=5)
@@ -114,17 +184,20 @@ def aggregate_renewables(df_raw,res_type):
 
         return val
 
-    def estimate_missing_values(df):
-        #Filter out nan
-        df_limited = df[df['realtime'].notnull()]
-        last_row = df_limited.loc[df_limited['datetime'].idxmax()]
-        rt_vs_mrf = last_row['realtime']/last_row['mostrecentforecast']
+    def estimate_missing_values(df,res_type):
+        if res_type=='wind':
+            #Filter out nan
+            df_limited = df[df['realtime'].notnull()]
+            last_row = df_limited.loc[df_limited['datetime'].idxmax()]
+            rt_vs_mrf = last_row['realtime']-last_row['mostrecentforecast']
 
-        #fill nan values
-        df['realtime'] = df['realtime'].mask(df['realtime'].isna(),df['mostrecentforecast']*rt_vs_mrf)
+            #fill nan values
+            df['realtime'] = df['realtime'].mask(df['realtime'].isna(),df['mostrecentforecast']+rt_vs_mrf)
 
-        return df[['datetime', 'realtime']]
-
+            return df[['datetime', 'realtime']]
+        elif res_type == 'solar':
+            df['realtime'] = df['realtime'].mask(df['realtime'] == 0,df['mostrecentforecast'])
+            return df[['datetime','realtime']]
 
     columns = ['datetime','realtime', 'mostrecentforecast','dayahead11hforecast']
     df = pd.DataFrame(columns=columns)
@@ -146,7 +219,7 @@ def aggregate_renewables(df_raw,res_type):
     now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
     df_fut = df[df['datetime']>=now][['datetime','dayahead11hforecast']]
     df_past = df[df['datetime']<=now][['datetime','realtime','mostrecentforecast']]
-    df_past = estimate_missing_values(df_past)
+    df_past = estimate_missing_values(df_past,res_type)
 
     return df_past,df_fut
 
@@ -168,10 +241,32 @@ def complement_SI(df_qh,df_min):
 
     est_SI_current = sum(min_filt)/len(min_filt)
 
-    #TODO: add a new row to df_qh with the newly calculated estimated SI
 
-    return df_qh
+    #Add row to quarter hourly dataframe with estimated SI value for current qh
+    latest_qh = last_known_qh + dt.timedelta(minutes=15)
+    return_df = df_qh[['datetime','systemimbalance']]
+    return_df.loc[len(df_qh)] = [latest_qh,est_SI_current]
 
+
+    return return_df
+
+def aggregate_conventional(df_raw,list_gen_types):
+
+    columns = ['datetime'] + list_gen_types
+    df = pd.DataFrame(columns=columns)
+
+    timestamps = df_raw.index.unique()
+    df_raw.reset_index(inplace=True)
+
+
+    for i,ts in enumerate(timestamps):
+        list_val = [ts]
+        df_filt = df_raw[df_raw['datetime']==ts]
+        for gen_type in list_gen_types:
+            list_val.append(df_filt[df_filt['fuelcode']==gen_type]['dayaheadgenerationschedule'].values[0])
+        df.loc[i] = list_val
+
+    return df
 
 
 ######################
@@ -180,70 +275,79 @@ def complement_SI(df_qh,df_min):
 connection = elia.EliaPandasClient()
 
 
-########################################
-# Cross border flows
-########################################
-print("Starting timer for border_flows")
-timer = time.time()
-start,end = get_start_and_end_time_data("CBF")
-df_CB = connection.get_cross_border_flows_per_quarter_hour(start = start,end=end)
-print(f"Time spent for CB equals {time.time()-timer}")
 
-start,end = get_start_and_end_time_data("net_pos_DA")
-df_net_pos = connection.get_DA_net_pos(start=start,end=end)
+if __name__ == '__main__':
 
-####################################################
-#Conventional generation forecast by fuel type
-#####################################################
-start,end = get_start_and_end_time_data("DA_FT")
-df_DA_FT = connection.get_DA_schedule_by_fuel()
+    ########################################
+    # Cross border flows
+    ########################################
+    print("Starting timer for border_flows")
+    timer = time.time()
+    start,end = get_start_and_end_time_data("CBF")
+    df_CB = connection.get_cross_border_flows_per_quarter_hour(start = start,end=end)
+    print(f"Time spent for CB equals {time.time()-timer}")
 
-####################################################
-#System imbalance information
-#####################################################
-start,end = get_start_and_end_time_data("SI")
-# df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour(start=start,end=end)
-df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start,end=end)
+    start,end = get_start_and_end_time_data("net_pos_DA")
+    df_net_pos = connection.get_DA_net_pos(start=start,end=end)
 
-df_SI_min = connection.get_imbalance_prices_per_min()
-
-df_SI_quarter = complement_SI(df_qh=df_SI_quarter,df_min=df_SI_min)
-
-####################################################
-#System load
-#####################################################
-start,end = get_start_and_end_time_data("load")
-
-df_load = connection.get_load_on_elia_grid(start=start, end=end)
-df_load = connection.get_load_on_elia_grid(start=start, end=end)
-
-####################################################
-#RES Forecast
-#####################################################
-start,end = get_start_and_end_time_data("RES")
-
-#Note: these NRT datasets only go back about half a day I think, but it should be possible to use another dataset with historical values to go back further
-df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start,end=end)
-df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start,end=end)
-
-df_wind_past,df_wind_fut = aggregate_renewables(df_raw=df_wind,res_type='wind')
-df_solar_past,df_solar_fut = aggregate_renewables(df_raw=df_solar,res_type='solar')
-
-####################################################
-#DA Prices
-#####################################################
+    ####################################################
+    #Conventional generation forecast by fuel type
+    #####################################################
+    start,end = get_start_and_end_time_data("DA_FT")
+    df_DA_FT = connection.get_DA_schedule_by_fuel()
 
 
-####################################################
-#Merit order
-#####################################################
-start,end = get_start_and_end_time_data("ARC")
-#df_merit_decr = connection.get_merit_order_decremental(start=start,end=end)
-#df_merit_incr = connection.get_merit_order_decremental(start=start,end=end)
-df_ARC_MO_raw = connection.get_ARC_merit_order(start=start,end=end)
-df_ARC_MO = convert_raw_ARC(df_raw=df_ARC_MO_raw)
 
-df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start,end=end)
+    df_filtered = aggregate_conventional(df_raw=df_DA_FT,list_gen_types=['NU','NG'])
+
+
+
+    ####################################################
+    #System imbalance information
+    #####################################################
+    start,end = get_start_and_end_time_data("SI")
+    # df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour(start=start,end=end)
+    df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start,end=end)
+
+    df_SI_min = connection.get_imbalance_prices_per_min()
+
+    df_SI_quarter = complement_SI(df_qh=df_SI_quarter,df_min=df_SI_min)
+
+    ####################################################
+    #System load
+    #####################################################
+    start,end = get_start_and_end_time_data("load")
+
+    df_load = connection.get_load_on_elia_grid(start=start, end=end)
+    df_load = connection.get_load_on_elia_grid(start=start, end=end)
+
+    ####################################################
+    #RES Forecast
+    #####################################################
+    start,end = get_start_and_end_time_data("RES")
+
+    #Note: these NRT datasets only go back about half a day I think, but it should be possible to use another dataset with historical values to go back further
+    df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start,end=end)
+    df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start,end=end)
+
+    df_wind_past,df_wind_fut = aggregate_renewables(df_raw=df_wind,res_type='wind')
+    df_solar_past,df_solar_fut = aggregate_renewables(df_raw=df_solar,res_type='solar')
+
+    ####################################################
+    #DA Prices
+    #####################################################
+
+
+    ####################################################
+    #Merit order
+    #####################################################
+    start,end = get_start_and_end_time_data("ARC")
+    #df_merit_decr = connection.get_merit_order_decremental(start=start,end=end)
+    #df_merit_incr = connection.get_merit_order_decremental(start=start,end=end)
+    df_ARC_MO_raw = connection.get_ARC_merit_order(start=start,end=end)
+    df_ARC_MO = convert_raw_ARC(df_raw=df_ARC_MO_raw)
+
+    df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start,end=end)
 
 
 

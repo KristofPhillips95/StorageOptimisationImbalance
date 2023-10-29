@@ -2,13 +2,13 @@ import numpy as np
 import time
 import pandas as pd
 import datetime as dt
-from datetime import datetime,timedelta
 import os
 import torch
 from workalendar.europe import Belgium
 import torch_classes as tc
 import train_functions as tf
 import os
+import csv
 
 #os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:256"
 
@@ -110,19 +110,7 @@ def get_3d_arrays_labels(labels,lookahead,lookback,n_quantiles):
     return labels_ext
 
 
-def set_arrays_to_tensors_device(list_arrays,dev):
-    # Set list of tensors to specified device
 
-    global_list = []
-
-    for item in list_arrays:
-        if type(item) is list:
-            new_entry = [torch.from_numpy(i).float().to(dev) for i in item]
-        else:
-            new_entry = torch.from_numpy(item).float().to(dev)
-        global_list.append(new_entry)
-
-    return global_list
 
 def get_train_val_test_arrays(list_data,idd):
 
@@ -149,22 +137,30 @@ def get_train_val_test_arrays(list_data,idd):
     return list_train,list_val,list_test
 
 
+
+
+
 if __name__ == '__main__':
+
 
 
     idd = {
         'data_file_loc': r'input_data_scaled.h5',
-        'read_cols_past_ctxt': ['Frame_RT_wind_total_norm','Frame_RT_pv_norm','Frame_RT_load_norm','Frame_produced_nuclear_norm', 'Frame_produced_gas_norm', 'Frame_produced_norm', 'Frame_BE_Netpos_norm', 'Frame_ACE_norm', 'Frame_SI_norm'],
-        'read_cols_fut_ctxt': ['Frame_DA_F_wind_total_norm','Frame_DA_Prices_norm','Frame_DA_F_pv_norm','Frame_DA_F_load_norm','Frame_DA_scheduling_nuclear_norm','Frame_DA_scheduling_gas_norm','Frame_DA_scheduling_water_norm'],
+        'read_cols_past_ctxt': ['Frame_RT_wind_total_norm','Frame_RT_pv_norm', 'Frame_SI_norm'],
+        'read_cols_fut_ctxt': ['Frame_DA_F_wind_total_norm','Frame_DA_F_pv_norm','Frame_DA_scheduling_nuclear_norm','Frame_DA_scheduling_gas_norm'],
         'target_col': 'Frame_SI_norm',
         'batch_size': 64,
-        'list_quantiles': [0.1, 0.5, 0.9],
+        'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [5/7,1/7,1/7],
         'lookahead': 10,
         'lookback': 4,
         'dev': 'cuda',
-        'n_components_feat':2,
-        'n_components_lab': 1,
+        'n_components_feat':2, #number of input tensors to neural network for forward pass
+        'n_components_lab': 1, #number of input tensors for loss function calc
+        'split_val_test': 3, #split up forward pass on validation & test set to avoid memory issues
+        'n_configs': 3, #Number of HP configurations
+        'store_code': '20230503',
+        'epochs': 150
     }
 
     df_past_ctxt = read_data_h5(input_dict=idd, mode='past').drop(['FROM_DATE'], axis=1)
@@ -181,44 +177,25 @@ if __name__ == '__main__':
 
     #Extend arrays (for RNN input)
     array_ext_past_ctxt, array_ext_fut_ctxt,array_ext_past_temp,array_ext_fut_temp = get_3d_arrays(past_ctxt=array_past_ctxt,fut_ctxt = array_fut_ctxt,temp = array_temp, lookahead = 10, lookback = 4)
-    labels_ext = get_3d_arrays_labels(labels = df_past_ctxt['SI'].to_numpy(),lookahead=10,lookback=4,n_quantiles = 3)
+    labels_ext = get_3d_arrays_labels(labels = df_past_ctxt['SI'].to_numpy(),lookahead=10,lookback=4,n_quantiles = len(idd['list_quantiles']))
 
 
     feat_train,feat_val,feat_test = get_train_val_test_arrays([array_ext_past_ctxt,array_ext_fut_ctxt],idd)
     lab_train,lab_val,lab_test = get_train_val_test_arrays([labels_ext],idd)
-
-
-    tensor_labels_ext = torch.from_numpy(labels_ext)[0:100].to('cuda')
-
-    net = tc.LSTM_ED(input_size_e=9, hidden_size_lstm=64, input_size_d=7, input_size_past_t=1, input_size_fut_t=1, output_dim=len(idd['list_quantiles']), dev='cuda')
-    list_quantiles = [0.1,0.5,0.9]
-
-
-
-
-
-
-
-    #Run training
-
-
     list_arrays = [feat_train,lab_train,feat_val,lab_val,feat_test,lab_test]
 
-    [feat_train_pt,lab_train_pt,feat_val_pt,lab_val_pt,feat_test_pt,lab_test_pt] = set_arrays_to_tensors_device(list_arrays,idd['dev'])
 
+    ##### TO DO: write function to create hp list dict #####
+    hp_dict = {
+        'input_size_e': [3 for i in range(idd['n_configs'])],
+        'hidden_size_lstm': [32,64,128],
+        'input_size_d': [4 for i in range(idd['n_configs'])],
+        'input_size_past_t':[1 for i in range(idd['n_configs'])], #TODO: not doing anything right now? Check
+        'input_size_fut_t': [1 for i in range(idd['n_configs'])], #TODO: not doing anything right now? Check
+        'output_dim': [len(idd['list_quantiles']) for i in range(idd['n_configs'])],
+    }
 
-    train_Dataset = torch.utils.data.TensorDataset(feat_train_pt[0], feat_train_pt[1], lab_train_pt[0])
-    training_loader = torch.utils.data.DataLoader(train_Dataset,batch_size=idd['batch_size'],shuffle=True)
-
-    idd['training_loader'] = training_loader
-    idd['net'] = net
-    idd['loss_fct'] = tc.Loss_pinball(idd['list_quantiles'],idd['dev'])
-    idd['val_test_feat'] = [feat_val_pt,feat_test_pt]
-    idd['val_test_lab'] = [lab_val_pt,lab_test_pt]
-
-    tf.train_forecaster(idd)
-
-
+    tf.hp_tuning(dict=idd,dict_HPs=hp_dict,list_arrays=list_arrays)
 
 
     x=1
