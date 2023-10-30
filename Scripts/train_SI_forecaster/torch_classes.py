@@ -3,50 +3,10 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+import sys
+import copy
 
-
-class LSTM_ED(torch.nn.Module):
-    def __init__(self, input_size_e, hidden_size_lstm, input_size_d,input_size_past_t,input_size_fut_t,output_dim,dev):
-        super(LSTM_ED, self).__init__()
-        self.input_size_e = input_size_e  # input size
-        self.input_size_d = input_size_d  # input size
-
-        self.hidden_size_lstm = hidden_size_lstm  # hidden state
-
-        self.output_dim = output_dim
-
-        self.num_layers_e = 1
-        self.num_layers_d = 1
-
-        self.dev = dev
-
-        #self.nn_past = torch.nn.Linear(in_features = input_size_past_t, output_features = hidden_size_lstm)
-        #self.nn_fut = torch.nn.Linear(in_features = input_size_fut_t)
-
-        self.lstm_e = torch.nn.LSTM(input_size=input_size_e, hidden_size=hidden_size_lstm, num_layers=1,
-                                    batch_first=True,bidirectional=False).to(dev)  # Encoder
-        self.lstm_d = torch.nn.LSTM(input_size=input_size_d, hidden_size=hidden_size_lstm, num_layers=1,
-                                    batch_first=True,bidirectional=False).to(dev)  # Decoder
-        self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev) # fully connected 1
-
-    def forward(self, list_data,dev_type='NA'):
-        x_e = list_data[0]
-        x_d = list_data[1]
-
-        if dev_type == 'NA':
-            dev = self.dev
-        else:
-            dev = dev_type
-
-        h_0 = Variable(torch.zeros(self.num_layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
-        c_0 = Variable(torch.zeros(self.num_layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
-        # Propagate input through LSTM
-        output_e, (h_e, c_e) = self.lstm_e(x_e, (h_0, c_0))  # lstm with input, hidden, and internal state
-
-        output_d, (h_d, c_d) = self.lstm_d(x_d, (h_e, c_e))
-        out = torch.squeeze(self.fc(output_d))  # Final Output
-        return out
-
+#Loss functions
 class Loss_pinball(torch.nn.Module):
 
     def __init__(self,list_quantiles,dev):
@@ -71,7 +31,207 @@ class Loss_pinball(torch.nn.Module):
 
         return loss
 
-#Bi-attention
+class Loss_profit(nn.Module):
+
+    def __init__(self):
+        super(Loss_profit, self).__init__()
+
+    def forward(self, output, prices):
+        schedules = output
+        profit = torch.sum(torch.mul(schedules, prices))
+
+        return -profit
+
+class Loss_smoothing(nn.Module):
+
+    def __init__(self,obj):
+        super(Loss_smoothing, self).__init__()
+        self.obj = obj
+
+    def forward(self, y_hat,labels):
+
+        if self.obj == "profit":
+            loss = -torch.sum(torch.mul(y_hat, labels))
+        elif self.obj == "mse_sched":
+            loss = torch.sum(torch.square(y_hat-labels))
+
+        return loss
+
+
+""" 
+Basic unidirectional encoder-decoder without attention. 
+"""
+class LSTM_ED(torch.nn.Module):
+    def __init__(self, input_size_e,layers_e, hidden_size_lstm, input_size_d,layers_d,output_dim,dev):
+        super(LSTM_ED, self).__init__()
+        self.input_size_e = input_size_e  # input size
+        self.input_size_d = input_size_d  # input size
+        self.layers_e = layers_e
+        self.layers_d = layers_d
+
+        self.hidden_size_lstm = hidden_size_lstm  # hidden state
+
+        self.output_dim = output_dim
+
+
+        self.dev = dev
+
+        #self.nn_past = torch.nn.Linear(in_features = input_size_past_t, output_features = hidden_size_lstm)
+        #self.nn_fut = torch.nn.Linear(in_features = input_size_fut_t)
+
+        self.lstm_e = torch.nn.LSTM(input_size=input_size_e, hidden_size=hidden_size_lstm, num_layers=layers_e,
+                                    batch_first=True,bidirectional=False).to(dev)  # Encoder
+        self.lstm_d = torch.nn.LSTM(input_size=input_size_d, hidden_size=hidden_size_lstm, num_layers=layers_d,
+                                    batch_first=True,bidirectional=False).to(dev)  # Decoder
+        self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev) # fully connected 1
+
+
+
+    def forward(self, list_data,dev_type='NA'):
+        x_e = list_data[0]
+        x_d = list_data[1]
+
+        if dev_type == 'NA':
+            dev = self.dev
+        else:
+            dev = dev_type
+
+        h_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
+        c_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
+        # Propagate input through LSTM
+        output_e, (h_e, c_e) = self.lstm_e(x_e, (h_0, c_0))  # lstm with input, hidden, and internal state
+
+
+        output_d, (h_d, c_d) = self.lstm_d(x_d, (h_e, c_e))
+        out = torch.squeeze(self.fc(output_d))  # Final Output
+        return out
+
+
+"""
+Bi-directional RNNs with attention by chatgpt
+"""
+class AttentionModule(torch.nn.Module):
+    """
+    Implements the attention mechanism.
+    """
+    def __init__(self, hidden_size_lstm):
+        """
+        Args:
+            hidden_size_lstm (int): Size of the LSTM hidden state.
+        """
+        super(AttentionModule, self).__init__()
+        self.attn = torch.nn.Linear(2*hidden_size_lstm + hidden_size_lstm, hidden_size_lstm)
+        self.v = torch.nn.Parameter(torch.rand(hidden_size_lstm))
+
+    def forward(self, hidden, encoder_outputs):
+        """
+        Forward propagate the attention mechanism.
+
+        Args:
+            hidden (Tensor): The previous hidden state of the decoder LSTM.
+            encoder_outputs (Tensor): The output sequences from the encoder LSTM.
+
+        Returns:
+            Tensor: Attention weights.
+        """
+        # Calculate attention weights (energies)
+        attn_energies = self.score(hidden, encoder_outputs)
+        attn_energies = attn_energies.t().unsqueeze(1)
+
+        return F.softmax(attn_energies, dim=2)
+
+    def score(self, hidden, encoder_outputs):
+        """
+        Compute attention scores.
+
+        Args:
+            hidden (Tensor): The previous hidden state of the decoder LSTM.
+            encoder_outputs (Tensor): The output sequences from the encoder LSTM.
+
+        Returns:
+            Tensor: Attention scores.
+        """
+        energy = self.attn(torch.cat((hidden.repeat(encoder_outputs.size(0), 1, 1), encoder_outputs), 2))
+        energy = energy.transpose(1, 2)
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)
+        energy = torch.bmm(v, energy)
+        return energy.squeeze(1)
+
+class LSTM_ED_Attention(torch.nn.Module):
+    """
+    LSTM-based Encoder-Decoder model with Attention mechanism.
+    """
+    def __init__(self, input_size_e, hidden_size_lstm, input_size_d, output_dim, dev):
+        """
+        Args:
+            input_size_e (int): Feature dimension of input data for the encoder.
+            hidden_size_lstm (int): Size of the LSTM hidden state.
+            input_size_d (int): Feature dimension of input data for the decoder.
+            output_dim (int): Dimensionality of the model output.
+            dev (str): Device to deploy the model to ('cpu' or 'cuda').
+        """
+        super(LSTM_ED_Attention, self).__init__()
+
+        # Bidirectional LSTM for the encoder
+        self.lstm_e = torch.nn.LSTM(input_size=input_size_e, hidden_size=hidden_size_lstm, num_layers=1,
+                                    batch_first=True, bidirectional=True).to(dev)
+
+        # Attention mechanism
+        self.attn = AttentionModule(hidden_size_lstm)
+
+        # LSTM for the decoder
+        self.lstm_d = torch.nn.LSTM(input_size=input_size_d + 2*hidden_size_lstm, hidden_size=hidden_size_lstm,
+                                    num_layers=1, batch_first=True, bidirectional=False).to(dev)
+
+        # Fully connected layer for the final output
+        self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev)
+
+    def forward(self, list_data, dev_type='NA'):
+        """
+        Forward propagate the model.
+
+        Args:
+            list_data (list): A list containing encoder and decoder input data.
+            dev_type (str, optional): Device type, if different from initialized device. Defaults to 'NA'.
+
+        Returns:
+            Tensor: Model's output predictions.
+        """
+        x_e = list_data[0]  # Encoder input
+        x_d = list_data[1]  # Decoder input
+
+        # Determine device type
+        if dev_type == 'NA':
+            dev = self.dev
+        else:
+            dev = dev_type
+
+        # Initialize hidden and cell states for the encoder LSTM
+        h_0 = Variable(torch.zeros(2, x_e.size(0), self.hidden_size_lstm)).to(dev)  # 2 for bidirectionality
+        c_0 = Variable(torch.zeros(2, x_e.size(0), self.hidden_size_lstm)).to(dev)
+
+        # Pass encoder input through bidirectional LSTM
+        output_e, (h_e, c_e) = self.lstm_e(x_e, (h_0, c_0))
+
+        # Combine bidirectional LSTM outputs
+        output_e = (output_e[:, :, :self.hidden_size_lstm] + output_e[:, :, self.hidden_size_lstm:])
+
+        # Compute attention weights and get context
+        attn_weights = self.attn(h_e[-1], output_e)
+        context = attn_weights.bmm(output_e.transpose(0, 1))
+
+        # Concatenate context to decoder input
+        x_d = torch.cat((x_d, context.transpose(0, 1)), 2)
+
+        # Pass decoder input through LSTM
+        output_d, _ = self.lstm_d(x_d, (h_e.view(1, h_e.size(1), -1), c_e.view(1, c_e.size(1), -1)))
+
+        out = torch.squeeze(self.fc(output_d))
+        return out
+
+"""
+Bi-attention, supposedly as translated by chatgpt from the tf code of Jeremie to torch code
+"""
 
 import torch
 import torch.nn as nn
@@ -141,20 +301,25 @@ class DecoderRNN(nn.Module):
         return output, hidden
 
 
-# Define your input sizes
-input_size_past_ctxt = ...  # Define the appropriate size
-input_size_past_temp = ...  # Define the appropriate size
-input_size_fut_ctxt = ...  # Define the appropriate size
-input_size_fut_temp = ...  # Define the appropriate size
-hidden_size = ...  # Define the hidden size
-output_size = ...  # Define the output size
+# # Define your input sizes
+# input_size_past_ctxt = ...  # Define the appropriate size
+# input_size_past_temp = ...  # Define the appropriate size
+# input_size_fut_ctxt = ...  # Define the appropriate size
+# input_size_fut_temp = ...  # Define the appropriate size
+# hidden_size = ...  # Define the hidden size
+# output_size = ...  # Define the output size
+#
+# # Encoder and Decoder initialization
+# encoder = EncoderRNN(input_size_past_ctxt, input_size_past_temp, hidden_size)
+# decoder = DecoderRNN(input_size_fut_ctxt, input_size_fut_temp, output_size, hidden_size)
+#
+# # Training loop (a basic example)
+# for i in range(epochs):
+#     encoder_outputs, encoder_hidden = encoder(past_ctxt, past_temp)
+#     decoder_output, decoder_hidden = decoder(fut_ctxt, fut_temp, encoder_outputs)
+#     # Compute loss, backpropagate, update weights, etc.
 
-# Encoder and Decoder initialization
-encoder = EncoderRNN(input_size_past_ctxt, input_size_past_temp, hidden_size)
-decoder = DecoderRNN(input_size_fut_ctxt, input_size_fut_temp, output_size, hidden_size)
 
-# Training loop (a basic example)
-for i in range(epochs):
-    encoder_outputs, encoder_hidden = encoder(past_ctxt, past_temp)
-    decoder_output, decoder_hidden = decoder(fut_ctxt, fut_temp, encoder_outputs)
-    # Compute loss, backpropagate, update weights, etc.
+
+
+
