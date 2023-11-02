@@ -13,8 +13,8 @@ if __name__ == '__main__':
 
     idd = {
         'data_file_loc': "../data_preprocessing/data_scaled.h5",
-        'read_cols_past_ctxt': ['SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc'],
-        'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc', 'load_fc'],
+        'read_cols_past_ctxt': ['ACE','SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc','Net_Position'],
+        'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc', 'Water_fc', 'load_fc'],
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
         'data_from': datetime(2017,1,1),
@@ -28,8 +28,8 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         'n_configs': 3, #Number of HP configurations
-        'store_code': '20231029_fullRun',
-        'epochs': 100,
+        'store_code': '20231011_fullRun_2',
+        'epochs': 150,
         'patience': 25
     }
 
@@ -44,7 +44,7 @@ if __name__ == '__main__':
 
     #Extend arrays (for RNN input)
     array_ext_past_ctxt, array_ext_fut_ctxt,array_ext_past_temp,array_ext_fut_temp = fdp.get_3d_arrays(past_ctxt=array_past_ctxt,fut_ctxt = array_fut_ctxt,temp = array_temp, lookahead = 10, lookback = 4)
-    labels_ext = fdp.get_3d_arrays_labels(labels = df_past_ctxt[idd['target_col']].to_numpy(),lookahead=idd['lookahead'],lookback=idd['lookback'],n_quantiles = len(idd['list_quantiles']))
+    labels_ext = fdp.get_3d_arrays_labels(labels = df_past_ctxt['ACE'].to_numpy(),lookahead=10,lookback=4,n_quantiles = len(idd['list_quantiles']))
 
     array_ext_past = np.concatenate((array_ext_past_ctxt,array_ext_past_temp),axis=2)
     array_ext_fut = np.concatenate((array_ext_fut_ctxt,array_ext_fut_temp),axis=2)
