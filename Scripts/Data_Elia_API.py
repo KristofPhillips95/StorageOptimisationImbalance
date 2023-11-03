@@ -28,7 +28,7 @@ def get_dataframes(list_data,start,end,timeframe):
 
     return df_all
 
-def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60),timeframe='past'):
+def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=15),timeframe='past'):
     #TODO: check why buffer necessary
     #TODO: check correctness of data
 
@@ -38,13 +38,14 @@ def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60),timefram
 
 
     if datapoint == 'RT_wind':
+
         df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        df, _ = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe)
+        df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe,datapoint='rt')
         df.rename(columns={'realtime': datapoint},inplace=True)
 
     elif datapoint == 'RT_pv':
         df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        df, _ = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe)
+        df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe,datapoint='rt')
         df.rename(columns={'realtime': datapoint},inplace=True)
 
     elif datapoint == 'RT_SI':
@@ -55,23 +56,25 @@ def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60),timefram
 
     elif datapoint == 'RT_load':
         df_load = connection.get_load_on_elia_grid(start=start-buffer, end=end+buffer)
-        df_load = process_load(df_load,timeframe=timeframe,datapoint='rt')
-        return df_load
+        df = process_load(df_load,timeframe=timeframe,datapoint='rt')
+        df.rename(columns={'measured': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_wind':
+        if timeframe == 'fut':
+            test = 1
         df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        _, df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe)
+        df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe,datapoint='da_f')
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_pv':
         df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        _, df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe)
+        df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe,datapoint='da_f')
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_load':
         df_load = connection.get_load_on_elia_grid(start=start-buffer, end=end+buffer)
-        df_load = process_load(df_load,timeframe=timeframe,datapoint='da_f')
-        return df_load
+        df = process_load(df_load, timeframe=timeframe, datapoint='da_f')
+        df.rename(columns={'dayaheadforecast': datapoint}, inplace=True)
 
     elif datapoint == 'DA_F_nuclear':
         df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
@@ -172,10 +175,16 @@ def convert_raw_ARC(df_raw):
 
     return df
 
-def aggregate_renewables(df_raw,res_type,timeframe):
+def aggregate_renewables(df_raw,res_type,timeframe,datapoint):
     """
-    Converts raw elia dataframes with renewable production and forecast to usable dataframes
-    output: separated dataframes for past context (= actual realizations of renewable production) and future context (=11am DA RES forecast)
+    Converts raw elia dataframes with observed and forecasted renewable production to usable dataframes
+    Includes data enhancement of unknown values if datapoint is measured real-time production
+
+    :param df_raw: pandas dataframe retrieved from Elia data platform
+    :param timeframe: indicates whether this concerns past or future data, str 'past' or 'fut'
+    :param datapoint: indicates which column we want to retrieve, str 'da_f' (day-ahead forecast) or 'rt' (measures real-time values)
+
+    :return: dataframe with column 'datetime' and datapoint for the relevant timeframe
     """
     #TODO: for past context, use difference of actual vs. forecast RES output?
 
@@ -268,23 +277,42 @@ def aggregate_renewables(df_raw,res_type,timeframe):
                 val_list.append(val)
         df.loc[i] = val_list
 
-    now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
-    df_fut = df[df['datetime']>=now][['datetime','dayahead11hforecast']]
-    df_past = df[df['datetime']<=now][['datetime','realtime','mostrecentforecast']]
-    df_past = estimate_missing_values(df_past,res_type) #This can be used to enhance data if we want to
 
-    return df_past,df_fut
+
+    # now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
+    # df_fut = df[df['datetime']>=now][['datetime','dayahead11hforecast']]
+    # df_past = df[df['datetime']<=now][['datetime','realtime','mostrecentforecast']]
+    # df_past = estimate_missing_values(df_past,res_type) #This can be used to enhance data if we want to
+
+    df_filtered_time = filter_df_timeframe(df=df,tf=timeframe)
+
+    if datapoint == 'da_f':
+        df_out =  df_filtered_time[['datetime','dayahead11hforecast']]
+    elif datapoint == 'rt':
+        df_out =  df_filtered_time[['datetime','realtime','mostrecentforecast']]
+        df_out = estimate_missing_values(df_out,res_type) #This can be used to enhance data if we want to
+    else:
+        sys.exit("Invalid datapoint")
+
+    return df_out
 
 def process_load(df_raw,timeframe,datapoint):
     """
-    Converts raw elia dataframes with renewable production and forecast to usable dataframes
-    output: separated dataframes for past context (= actual realizations of renewable production) and future context (=11am DA RES forecast)
+    Converts raw elia dataframes with observed and forecasted load to usable dataframes
+    Includes data enhancement of unknown values if datapoint is measured real-time load
+
+    :param df_raw: pandas dataframe retrieved from Elia data platform
+    :param timeframe: indicates whether this concerns past or future data, str 'past' or 'fut'
+    :param datapoint: indicates which column we want to retrieve, str 'da_f' (day-ahead forecast) or 'rt' (measures real-time values)
+
+    :return: dataframe with column 'datetime' and datapoint for the relevant timeframe
     """
 
     def estimate_missing_values(df):
         """"
         Implement continuation of relative difference latest known measured load vs last forecast
         """
+
         #Filter out nan
         df_limited = df[df['measured'].notnull()]
         last_row = df_limited.loc[df_limited['datetime'].idxmax()]
@@ -299,13 +327,6 @@ def process_load(df_raw,timeframe,datapoint):
     df_raw.index.name='datetime'
     df = df_raw.reset_index()
     df = df[columns]
-
-
-    # if timeframe == 'fut':
-    #     df_out = df[df['datetime']>=now][['datetime','dayaheadforecast']]
-    # elif timeframe == 'past':
-    #     df_out = df[df['datetime']<=now][['datetime','measured','mostrecentforecast']]
-    #     df_out = estimate_missing_values(df_out) #This can be used to enhance data if we want to
 
     df_filtered_time = filter_df_timeframe(df=df,tf=timeframe)
 

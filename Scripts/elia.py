@@ -11,7 +11,7 @@ import requests
 
 from decorators import split_along_time
 
-DATETIME_FORMAT = "%Y-%m-%d %H:%S"
+DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 TODAY = dt.date.today()
 YESTERDAY = TODAY - dt.timedelta(days=1)
 
