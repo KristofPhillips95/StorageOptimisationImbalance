@@ -55,7 +55,7 @@ def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60),timefram
 
     elif datapoint == 'RT_load':
         df_load = connection.get_load_on_elia_grid(start=start-buffer, end=end+buffer)
-        df_load = process_load(df_load,timeframe=timeframe)
+        df_load = process_load(df_load,timeframe=timeframe,datapoint='rt')
         return df_load
 
     elif datapoint == 'DA_F_wind':
@@ -69,7 +69,9 @@ def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60),timefram
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_load':
-        x=1
+        df_load = connection.get_load_on_elia_grid(start=start-buffer, end=end+buffer)
+        df_load = process_load(df_load,timeframe=timeframe,datapoint='da_f')
+        return df_load
 
     elif datapoint == 'DA_F_nuclear':
         df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
@@ -203,7 +205,7 @@ def aggregate_renewables(df_raw,res_type,timeframe):
 
         if res_type=='wind':
             """
-            Dataframe on PV shows values NA for the timestamps that have not been recorded/published yet.
+            Dataframe on wind shows values NA for the timestamps that have not been recorded/published yet.
             Logic: on the time stamps where 'realtime' == NA, fill data with most recent absolute difference
             """
             #Filter out nan
@@ -226,17 +228,14 @@ def aggregate_renewables(df_raw,res_type,timeframe):
                 TODO: test if this works
             """
 
-            mask1 = df['realtime'] != 0
-            mask2 = df['mostrecentforecast'] == 0
-
-            ref = dt.datetime(2000,1,1,0,0,0).astimezone(pytz.timezone('GMT'))
-
-            df_known_values = df[mask1]
-            df_expected_zero = df[mask2]
+            df_known_values = df[df['realtime'] != 0]
+            df_expected_zero = df[df['mostrecentforecast'] == 0]
 
             dt_last_nonzero_rt = df_known_values['datetime'].max()
             dt_last_zero_fc = df_expected_zero['datetime'].max()
 
+            #Replace the last known datetimes with a reference in the past if it doesn't exist
+            ref = dt.datetime(2000,1,1,0,0,0).astimezone(pytz.timezone('GMT'))
             if pd.isna(dt_last_nonzero_rt):
                 dt_last_nonzero_rt = ref
             if pd.isna(dt_last_zero_fc):
@@ -247,8 +246,8 @@ def aggregate_renewables(df_raw,res_type,timeframe):
                 rt_vs_mrf = last_row['realtime'] - last_row['mostrecentforecast']
 
                 df['realtime'] = np.maximum(df['realtime'].mask((df['realtime']==0) & (df['datetime']>dt_last_nonzero_rt), df['mostrecentforecast'] + rt_vs_mrf),0)
-
-            #df['realtime'] = df['realtime'].mask(df['realtime'] == 0,df['mostrecentforecast'])
+            else:
+                df['realtime'] = df['realtime'].mask((df['realtime']==0) & (df['datetime']>dt_last_nonzero_rt),df['mostrecentforecast'])
 
             return df[['datetime','realtime']]
 
@@ -276,7 +275,7 @@ def aggregate_renewables(df_raw,res_type,timeframe):
 
     return df_past,df_fut
 
-def process_load(df_raw,timeframe):
+def process_load(df_raw,timeframe,datapoint):
     """
     Converts raw elia dataframes with renewable production and forecast to usable dataframes
     output: separated dataframes for past context (= actual realizations of renewable production) and future context (=11am DA RES forecast)
@@ -301,16 +300,22 @@ def process_load(df_raw,timeframe):
     df = df_raw.reset_index()
     df = df[columns]
 
-    # timestamps = df_raw.index.unique()
-    # df_raw.reset_index(inplace=True)
 
-    now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
-    if timeframe == 'fut':
-        df_out = df[df['datetime']>=now][['datetime','dayaheadforecast']]
-    elif timeframe == 'past':
-        df_out = df[df['datetime']<=now][['datetime','measured','mostrecentforecast']]
+    # if timeframe == 'fut':
+    #     df_out = df[df['datetime']>=now][['datetime','dayaheadforecast']]
+    # elif timeframe == 'past':
+    #     df_out = df[df['datetime']<=now][['datetime','measured','mostrecentforecast']]
+    #     df_out = estimate_missing_values(df_out) #This can be used to enhance data if we want to
+
+    df_filtered_time = filter_df_timeframe(df=df,tf=timeframe)
+
+    if datapoint == 'da_f':
+        df_out =  df_filtered_time[['datetime','dayaheadforecast']]
+    elif datapoint == 'rt':
+        df_out =  df_filtered_time[['datetime','measured','mostrecentforecast']]
         df_out = estimate_missing_values(df_out) #This can be used to enhance data if we want to
-
+    else:
+        sys.exit("Invalid datapoint")
 
     return df_out
 
@@ -359,6 +364,29 @@ def aggregate_conventional(df_raw,list_gen_types,timeframe):
 
     return df
 
+def filter_df_timeframe(df,tf,ref=None):
+    """
+    Selects the rows of a dataframe in past or future relative to a reference
+
+    :param df: dataframe to be filtered, requires a column named 'datetime'
+    :param tf: timeframe, should be string 'past' or 'future'
+    :param ref: reference compared to which the df is filtered. Should be datetime object with timezone information
+                if no reference provided, 'now' will be used
+
+    :return: filtered df
+    """
+
+    if ref is None:
+        ref = dt.datetime.now().astimezone(pytz.timezone('GMT'))
+
+    if tf == 'past':
+        df_filtered = df[df['datetime']<=ref]
+    elif tf == 'fut':
+        df_filtered = df[df['datetime']>ref]
+    else:
+        sys.exit('Invalid timeframe')
+
+    return df_filtered
 
 ######################
 #Create connection object

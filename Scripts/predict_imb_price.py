@@ -62,7 +62,7 @@ if __name__ == '__main__':
     dict_pred = {
         'lookahead': 10,
         'lookback': 20,
-        'data_past': ['RT_load','RT_wind','RT_pv', 'RT_SI'],
+        'data_past': ['RT_load','DA_F_load','RT_wind','RT_pv', 'RT_SI'],
         'data_fut': ['DA_F_wind','DA_F_pv','DA_F_nuclear','DA_F_gas'],
         'loc_SI_FC': 'train_SI_forecaster/output/trained_models/LA_10/20230503/config_3.pt',
         'loc_price_FC': ''
