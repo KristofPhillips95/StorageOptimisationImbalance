@@ -60,8 +60,8 @@ def load_forecaster(dict,type):
 if __name__ == '__main__':
 
     dict_pred = {
-        'lookahead': 10,
-        'lookback': 20,
+        'lookahead': 5,
+        'lookback': 5,
         'data_past': ['RT_load','DA_F_load','RT_wind','DA_F_wind','RT_pv','DA_F_pv','RT_SI'],
         'data_fut': ['DA_F_load','DA_F_wind','DA_F_pv','DA_F_nuclear','DA_F_gas'],
         'loc_SI_FC': 'train_SI_forecaster/output/trained_models/LA_10/20230503/config_3.pt',

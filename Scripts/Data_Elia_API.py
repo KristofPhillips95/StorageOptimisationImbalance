@@ -28,8 +28,7 @@ def get_dataframes(list_data,start,end,timeframe):
 
     return df_all
 
-def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=15),timeframe='past'):
-    #TODO: check why buffer necessary
+def get_specific_df(datapoint,start,end,timeframe='past'):
     #TODO: check correctness of data
 
     def filter_df_time(df,start,end):
@@ -39,50 +38,50 @@ def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=15),timefram
 
     if datapoint == 'RT_wind':
 
-        df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start, end=end)
         df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe,datapoint='rt')
         df.rename(columns={'realtime': datapoint},inplace=True)
 
     elif datapoint == 'RT_pv':
-        df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start, end=end)
         df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe,datapoint='rt')
         df.rename(columns={'realtime': datapoint},inplace=True)
 
     elif datapoint == 'RT_SI':
-        df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start-buffer, end=end+buffer)
+        df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start, end=end)
         df_SI_min = connection.get_imbalance_prices_per_min()
         df = complement_SI(df_qh=df_SI_quarter, df_min=df_SI_min)
         df.rename(columns={'systemimbalance': datapoint},inplace=True)
 
     elif datapoint == 'RT_load':
-        df_load = connection.get_load_on_elia_grid(start=start-buffer, end=end+buffer)
+        df_load = connection.get_load_on_elia_grid(start=start, end=end)
         df = process_load(df_load,timeframe=timeframe,datapoint='rt')
         df.rename(columns={'measured': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_wind':
         if timeframe == 'fut':
             test = 1
-        df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start, end=end)
         df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe,datapoint='da_f')
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_pv':
-        df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
+        df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start, end=end)
         df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe,datapoint='da_f')
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_load':
-        df_load = connection.get_load_on_elia_grid(start=start-buffer, end=end+buffer)
+        df_load = connection.get_load_on_elia_grid(start=start, end=end)
         df = process_load(df_load, timeframe=timeframe, datapoint='da_f')
         df.rename(columns={'dayaheadforecast': datapoint}, inplace=True)
 
     elif datapoint == 'DA_F_nuclear':
-        df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
+        df_DA_FT = connection.get_DA_schedule_by_fuel(start=start, end=end)
         df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NU'],timeframe=timeframe)
         df.rename(columns={'NU': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_gas':
-        df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
+        df_DA_FT = connection.get_DA_schedule_by_fuel(start=start, end=end)
         df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NG'],timeframe=timeframe)
         df.rename(columns={'NG': datapoint},inplace=True)
 
