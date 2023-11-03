@@ -7,19 +7,19 @@ import time
 import numbers
 import sys
 import pytz
-
+import numpy as np
 ###################
 #Helper Methods
 ###################
 
 
-def get_dataframes(list_data,start,end):
+def get_dataframes(list_data,start,end,timeframe):
 
     list_df = []
 
     for i,datapoint in enumerate(list_data):
 
-        df = get_specific_df(datapoint,start,end)
+        df = get_specific_df(datapoint,start,end,timeframe=timeframe)
         list_df.append(df)
         if i == 0:
             df_all = df
@@ -28,7 +28,7 @@ def get_dataframes(list_data,start,end):
 
     return df_all
 
-def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60)):
+def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60),timeframe='past'):
     #TODO: check why buffer necessary
     #TODO: check correctness of data
 
@@ -39,12 +39,12 @@ def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60)):
 
     if datapoint == 'RT_wind':
         df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        df, _ = aggregate_renewables(df_raw=df_wind, res_type='wind')
+        df, _ = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe)
         df.rename(columns={'realtime': datapoint},inplace=True)
 
     elif datapoint == 'RT_pv':
         df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        df, _ = aggregate_renewables(df_raw=df_solar, res_type='solar')
+        df, _ = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe)
         df.rename(columns={'realtime': datapoint},inplace=True)
 
     elif datapoint == 'RT_SI':
@@ -53,24 +53,32 @@ def get_specific_df(datapoint,start,end,buffer=dt.timedelta(minutes=60)):
         df = complement_SI(df_qh=df_SI_quarter, df_min=df_SI_min)
         df.rename(columns={'systemimbalance': datapoint},inplace=True)
 
+    elif datapoint == 'RT_load':
+        df_load = connection.get_load_on_elia_grid(start=start-buffer, end=end+buffer)
+        df_load = process_load(df_load,timeframe=timeframe)
+        return df_load
+
     elif datapoint == 'DA_F_wind':
         df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        _, df = aggregate_renewables(df_raw=df_wind, res_type='wind')
+        _, df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe)
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_pv':
         df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start-buffer, end=end+buffer)
-        _, df = aggregate_renewables(df_raw=df_solar, res_type='solar')
+        _, df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe)
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
+
+    elif datapoint == 'DA_F_load':
+        x=1
 
     elif datapoint == 'DA_F_nuclear':
         df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
-        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NU'])
+        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NU'],timeframe=timeframe)
         df.rename(columns={'NU': datapoint},inplace=True)
 
     elif datapoint == 'DA_F_gas':
         df_DA_FT = connection.get_DA_schedule_by_fuel(start=start-buffer, end=end+buffer)
-        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NG'])
+        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NG'],timeframe=timeframe)
         df.rename(columns={'NG': datapoint},inplace=True)
 
     else:
@@ -162,7 +170,7 @@ def convert_raw_ARC(df_raw):
 
     return df
 
-def aggregate_renewables(df_raw,res_type):
+def aggregate_renewables(df_raw,res_type,timeframe):
     """
     Converts raw elia dataframes with renewable production and forecast to usable dataframes
     output: separated dataframes for past context (= actual realizations of renewable production) and future context (=11am DA RES forecast)
@@ -171,32 +179,77 @@ def aggregate_renewables(df_raw,res_type):
 
     def  get_value_column(df_filt,col,res_type):
         """
-        Fills up missing values of 'realtime' column of a dataframe
-        For estimating the values, the latest available ratio of realtime production and most recent forecast is used
+        Gets the aggregate value of renewables based on the standard form published by Elia
         """
 
         if res_type == 'solar':
             val = df_filt[df_filt['region']=='Belgium'][col].values[0]
         elif res_type == 'wind':
-            val = sum(df_filt[col].values)
+            print(col)
+            try:
+                val = sum(df_filt[col].values)
+            except:
+                val = None
         else:
             sys.exit('Invalid type')
 
         return val
 
     def estimate_missing_values(df,res_type):
+        """
+        Fill up values of realtime renewable production that are not published
+        Implement continuation of absolute (to avoid issues with 0 forecast) difference latest known measured production vs last forecast
+        """
+
         if res_type=='wind':
+            """
+            Dataframe on PV shows values NA for the timestamps that have not been recorded/published yet.
+            Logic: on the time stamps where 'realtime' == NA, fill data with most recent absolute difference
+            """
             #Filter out nan
             df_limited = df[df['realtime'].notnull()]
             last_row = df_limited.loc[df_limited['datetime'].idxmax()]
             rt_vs_mrf = last_row['realtime']-last_row['mostrecentforecast']
 
             #fill nan values
-            df['realtime'] = df['realtime'].mask(df['realtime'].isna(),df['mostrecentforecast']+rt_vs_mrf)
+            df['realtime'] = np.maximum(df['realtime'].mask(df['realtime'].isna(),df['mostrecentforecast']+rt_vs_mrf),0)
 
             return df[['datetime', 'realtime']]
+
         elif res_type == 'solar':
-            df['realtime'] = df['realtime'].mask(df['realtime'] == 0,df['mostrecentforecast'])
+            """
+            Dataframe on PV shows values 0 for the timestamps that have not been recorded/published yet.
+            Logic: find out of last nonzero RT value happened before or after last zero most recent forecast
+                if before: it seems like we are in the night. --> fill with most recent forecast
+                if after: fill zero values by applying the last known absolute different with the most recent forecast
+                          only changing the zero values after the last known nonzero RT value
+                TODO: test if this works
+            """
+
+            mask1 = df['realtime'] != 0
+            mask2 = df['mostrecentforecast'] == 0
+
+            ref = dt.datetime(2000,1,1,0,0,0).astimezone(pytz.timezone('GMT'))
+
+            df_known_values = df[mask1]
+            df_expected_zero = df[mask2]
+
+            dt_last_nonzero_rt = df_known_values['datetime'].max()
+            dt_last_zero_fc = df_expected_zero['datetime'].max()
+
+            if pd.isna(dt_last_nonzero_rt):
+                dt_last_nonzero_rt = ref
+            if pd.isna(dt_last_zero_fc):
+                dt_last_zero_fc = ref
+
+            if dt_last_nonzero_rt > dt_last_zero_fc:
+                last_row = df_known_values.loc[df_known_values['datetime'].idxmax()]
+                rt_vs_mrf = last_row['realtime'] - last_row['mostrecentforecast']
+
+                df['realtime'] = np.maximum(df['realtime'].mask((df['realtime']==0) & (df['datetime']>dt_last_nonzero_rt), df['mostrecentforecast'] + rt_vs_mrf),0)
+
+            #df['realtime'] = df['realtime'].mask(df['realtime'] == 0,df['mostrecentforecast'])
+
             return df[['datetime','realtime']]
 
     columns = ['datetime','realtime', 'mostrecentforecast','dayahead11hforecast']
@@ -219,9 +272,47 @@ def aggregate_renewables(df_raw,res_type):
     now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
     df_fut = df[df['datetime']>=now][['datetime','dayahead11hforecast']]
     df_past = df[df['datetime']<=now][['datetime','realtime','mostrecentforecast']]
-    df_past = estimate_missing_values(df_past,res_type)
+    df_past = estimate_missing_values(df_past,res_type) #This can be used to enhance data if we want to
 
     return df_past,df_fut
+
+def process_load(df_raw,timeframe):
+    """
+    Converts raw elia dataframes with renewable production and forecast to usable dataframes
+    output: separated dataframes for past context (= actual realizations of renewable production) and future context (=11am DA RES forecast)
+    """
+
+    def estimate_missing_values(df):
+        """"
+        Implement continuation of relative difference latest known measured load vs last forecast
+        """
+        #Filter out nan
+        df_limited = df[df['measured'].notnull()]
+        last_row = df_limited.loc[df_limited['datetime'].idxmax()]
+        rt_vs_mrf_rel = last_row['measured'] / last_row['mostrecentforecast']
+
+        #fill nan values
+        df['measured'] = df['measured'].mask(df['measured'].isna(),df['mostrecentforecast']*rt_vs_mrf_rel)
+
+        return df[['datetime', 'measured']]
+
+    columns = ['datetime', 'measured', 'mostrecentforecast','dayaheadforecast']
+    df_raw.index.name='datetime'
+    df = df_raw.reset_index()
+    df = df[columns]
+
+    # timestamps = df_raw.index.unique()
+    # df_raw.reset_index(inplace=True)
+
+    now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
+    if timeframe == 'fut':
+        df_out = df[df['datetime']>=now][['datetime','dayaheadforecast']]
+    elif timeframe == 'past':
+        df_out = df[df['datetime']<=now][['datetime','measured','mostrecentforecast']]
+        df_out = estimate_missing_values(df_out) #This can be used to enhance data if we want to
+
+
+    return df_out
 
 def complement_SI(df_qh,df_min):
     df_qh.reset_index(inplace=True)
@@ -250,7 +341,7 @@ def complement_SI(df_qh,df_min):
 
     return return_df
 
-def aggregate_conventional(df_raw,list_gen_types):
+def aggregate_conventional(df_raw,list_gen_types,timeframe):
 
     columns = ['datetime'] + list_gen_types
     df = pd.DataFrame(columns=columns)

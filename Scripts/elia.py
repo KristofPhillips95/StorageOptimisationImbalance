@@ -96,7 +96,7 @@ class EliaPandasClient:
             end: dt.datetime | dt.date | pd.Timestamp = TODAY,
             **params) -> pd.DataFrame:
         """Returns the measured and upscaled photovoltaic power generation on the Belgian grid."""
-        dataset = "ods003"
+        dataset = "ods002"
         where_filter = self._construct_where_filter(**locals())
         params.update({"where": where_filter})
         df = self._execute_query(dataset, params)
