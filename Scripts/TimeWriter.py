@@ -11,7 +11,7 @@ def write_time():
 
     if os.path.isfile(filename):
         df_times = pd.read_csv(filename,index_col=0)
-        df_times = df_times.append(row,ignore_index=True)
+        pd.concat([df_times, row], ignore_index=True)
     else:
         df_times = row
     print(f"Writing now to: {filename}", df_times)
