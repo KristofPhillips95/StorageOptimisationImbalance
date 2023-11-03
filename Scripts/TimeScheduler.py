@@ -1,21 +1,9 @@
 # !/usr/bin/env python3
-from datetime import datetime
-import pandas as pd
-import os
+import sched, time
+from TimeWriter import write_time_and_reschedule
 
+interval = 60
+my_scheduler = sched.scheduler(time.time, time.sleep)
+my_scheduler.enter(interval, 1, write_time_and_reschedule, (my_scheduler,interval,))
+my_scheduler.run()
 
-# print("script running")
-def write_time():
-    filename = os.path.join(os.getcwd(), "time_file.csv")
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    row = pd.DataFrame(data=[current_time], columns=["Timestamp"])
-
-    if os.path.isfile(filename):
-        df_times = pd.read_csv(filename, index_col=0)
-        df_times = df_times.append(row, ignore_index=True)
-    else:
-        df_times = row
-    # print("Time to write to file")
-    # print(filename)
-    df_times.to_csv(filename)
