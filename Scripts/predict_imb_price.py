@@ -11,6 +11,7 @@ import pickle
 import copy
 sys.path.insert(0,"train_SI_forecaster")
 import functions_data_preprocessing as fdp
+import scaling
 
 
 
@@ -96,7 +97,9 @@ if __name__ == '__main__':
 
     tic = time.time()
     df_past = get_dataframe(list_data=dict_pred['data_past'],steps=dict_pred['lookback'],timeframe='past')
+    df_past_scaled = scaling.scale_data(df_past.drop(['datetime'],axis=1))
     df_fut = get_dataframe(list_data=dict_pred['data_fut'],steps=dict_pred['lookahead'],timeframe='fut')
+    df_past_scaled = scaling.scale_data(df_fut.drop(['datetime'],axis=1))
     df_temporal_past = fdp.get_temporal_information(dict_pred,copy.deepcopy(df_past))
     df_temporal_fut = fdp.get_temporal_information(dict_pred,copy.deepcopy(df_fut))
 
