@@ -4,6 +4,7 @@ import functions_train as ft
 import functions_data_preprocessing as fdp
 import numpy as np
 from datetime import datetime
+import os
 
 
 
@@ -13,11 +14,12 @@ if __name__ == '__main__':
 
     idd = {
         'data_file_loc': "../data_preprocessing/data_scaled.h5",
-        'read_cols_past_ctxt': ['ACE','SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc','Net_Position'],
-        'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc', 'Water_fc', 'load_fc'],
+        'read_cols_past_ctxt': ['SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc'],
+        'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
-        'data_from': datetime(2017,1,1),
+        'datetime_from': datetime(2017,1,1,0,0,0),
+        'datetime_to': datetime(2017,2,1,0,0,0),
         'batch_size': 64,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [5/7,1/7,1/7],
@@ -28,15 +30,16 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         'n_configs': 3, #Number of HP configurations
-        'store_code': '20231011_fullRun_2',
-        'epochs': 150,
+        'store_code': '20231103_test',
+        'epochs': 2,
         'patience': 25
     }
 
 
+
     df_past_ctxt = fdp.read_data_h5(input_dict=idd, mode='past')#.drop(["FROM_DATE"],axis=1)
     df_fut_ctxt = fdp.read_data_h5(input_dict=idd, mode='fut')#.drop(["FROM_DATE"],axis=1)
-    df_temporal = fdp.get_temporal_information(idd).drop(["FROM_DATE"],axis=1)
+    df_temporal = fdp.get_temporal_information(idd)
 
     array_past_ctxt = df_past_ctxt.to_numpy()
     array_fut_ctxt = df_fut_ctxt.to_numpy()
@@ -44,7 +47,7 @@ if __name__ == '__main__':
 
     #Extend arrays (for RNN input)
     array_ext_past_ctxt, array_ext_fut_ctxt,array_ext_past_temp,array_ext_fut_temp = fdp.get_3d_arrays(past_ctxt=array_past_ctxt,fut_ctxt = array_fut_ctxt,temp = array_temp, lookahead = 10, lookback = 4)
-    labels_ext = fdp.get_3d_arrays_labels(labels = df_past_ctxt['ACE'].to_numpy(),lookahead=10,lookback=4,n_quantiles = len(idd['list_quantiles']))
+    labels_ext = fdp.get_3d_arrays_labels(labels = df_past_ctxt[idd['target_col']].to_numpy(),lookahead=10,lookback=4,n_quantiles = len(idd['list_quantiles']))
 
     array_ext_past = np.concatenate((array_ext_past_ctxt,array_ext_past_temp),axis=2)
     array_ext_fut = np.concatenate((array_ext_fut_ctxt,array_ext_fut_temp),axis=2)
@@ -82,7 +85,16 @@ if __name__ == '__main__':
     }
 
     #ft.hp_tuning(dict=idd,dict_HPs=hp_dict,list_arrays=list_arrays)
-    ft.run_training(dict_params=idd,dict_HPs=hp_dict,list_arrays=list_arrays)
+    list_output_dict = ft.run_training(dict_params=idd,dict_HPs=hp_dict,list_arrays=list_arrays)
+
+    la = idd['lookahead']
+    store_code = idd['store_code']
+    dir = f'output/trained_models/LA_{la}/{store_code}/'
+    os.mkdir(dir)
+
+    dict_data = {key:idd[key] for key in ['read_cols_past_ctxt','read_cols_fut_ctxt','cols_temp']}
+
+    ft.save_outcome(list_output_dict,dict_data,dir)
 
 
     x=1

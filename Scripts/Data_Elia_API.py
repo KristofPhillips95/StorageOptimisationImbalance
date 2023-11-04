@@ -13,13 +13,13 @@ import numpy as np
 ###################
 
 
-def get_dataframes(list_data,start,end,timeframe):
+def get_dataframes(list_data,start,end):
 
     list_df = []
 
     for i,datapoint in enumerate(list_data):
 
-        df = get_specific_df(datapoint,start,end,timeframe=timeframe)
+        df = get_specific_df(datapoint,start,end)
         list_df.append(df)
         if i == 0:
             df_all = df
@@ -28,61 +28,64 @@ def get_dataframes(list_data,start,end,timeframe):
 
     return df_all
 
-def get_specific_df(datapoint,start,end,timeframe='past'):
+def get_specific_df(datapoint,start,end):
     #TODO: check correctness of data
 
     def filter_df_time(df,start,end):
         df = df[(df['datetime'] <= end) & (df['datetime'] >= start)]
         return df
 
-
-    if datapoint == 'RT_wind':
+    if datapoint == 'wind_act':
 
         df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start, end=end)
-        df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe,datapoint='rt')
+        df = aggregate_renewables(df_raw=df_wind, res_type='wind',datapoint='rt')
         df.rename(columns={'realtime': datapoint},inplace=True)
 
-    elif datapoint == 'RT_pv':
+    elif datapoint == 'PV_act':
         df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start, end=end)
-        df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe,datapoint='rt')
+        df = aggregate_renewables(df_raw=df_solar, res_type='solar',datapoint='rt')
         df.rename(columns={'realtime': datapoint},inplace=True)
 
-    elif datapoint == 'RT_SI':
+    elif datapoint == 'SI':
+        """
+        This only yields the appropriate result if the published SI data per minute shows data in the quarter hour that
+        you are requesting. Since there is a lag of around 2/3 minutes for SI data per minute, this will yield a dataframe
+        with missing data of the last past quarter hour if you request this data in the beginning of said qh
+        """
+        #TODO: fix such that this works regardless of the time within the qh this is requested
         df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start, end=end)
         df_SI_min = connection.get_imbalance_prices_per_min()
         df = complement_SI(df_qh=df_SI_quarter, df_min=df_SI_min)
         df.rename(columns={'systemimbalance': datapoint},inplace=True)
 
-    elif datapoint == 'RT_load':
+    elif datapoint == 'load_act':
         df_load = connection.get_load_on_elia_grid(start=start, end=end)
-        df = process_load(df_load,timeframe=timeframe,datapoint='rt')
+        df = process_load(df_load,datapoint='rt')
         df.rename(columns={'measured': datapoint},inplace=True)
 
-    elif datapoint == 'DA_F_wind':
-        if timeframe == 'fut':
-            test = 1
+    elif datapoint == 'wind_fc':
         df_wind = connection.get_historical_wind_power_estimation_and_forecast_own(start=start, end=end)
-        df = aggregate_renewables(df_raw=df_wind, res_type='wind',timeframe=timeframe,datapoint='da_f')
+        df = aggregate_renewables(df_raw=df_wind, res_type='wind',datapoint='da_f')
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
-    elif datapoint == 'DA_F_pv':
+    elif datapoint == 'PV_fc':
         df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start, end=end)
-        df = aggregate_renewables(df_raw=df_solar, res_type='solar',timeframe=timeframe,datapoint='da_f')
+        df = aggregate_renewables(df_raw=df_solar, res_type='solar',datapoint='da_f')
         df.rename(columns={'dayahead11hforecast': datapoint},inplace=True)
 
-    elif datapoint == 'DA_F_load':
+    elif datapoint == 'load_fc':
         df_load = connection.get_load_on_elia_grid(start=start, end=end)
-        df = process_load(df_load, timeframe=timeframe, datapoint='da_f')
+        df = process_load(df_load, datapoint='da_f')
         df.rename(columns={'dayaheadforecast': datapoint}, inplace=True)
 
-    elif datapoint == 'DA_F_nuclear':
+    elif datapoint == 'Nuclear_fc':
         df_DA_FT = connection.get_DA_schedule_by_fuel(start=start, end=end)
-        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NU'],timeframe=timeframe)
+        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NU'])
         df.rename(columns={'NU': datapoint},inplace=True)
 
-    elif datapoint == 'DA_F_gas':
+    elif datapoint == 'Gas_fc':
         df_DA_FT = connection.get_DA_schedule_by_fuel(start=start, end=end)
-        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NG'],timeframe=timeframe)
+        df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NG'])
         df.rename(columns={'NG': datapoint},inplace=True)
 
     else:
@@ -174,16 +177,15 @@ def convert_raw_ARC(df_raw):
 
     return df
 
-def aggregate_renewables(df_raw,res_type,timeframe,datapoint):
+def aggregate_renewables(df_raw,res_type,datapoint):
     """
     Converts raw elia dataframes with observed and forecasted renewable production to usable dataframes
     Includes data enhancement of unknown values if datapoint is measured real-time production
 
     :param df_raw: pandas dataframe retrieved from Elia data platform
-    :param timeframe: indicates whether this concerns past or future data, str 'past' or 'fut'
     :param datapoint: indicates which column we want to retrieve, str 'da_f' (day-ahead forecast) or 'rt' (measures real-time values)
 
-    :return: dataframe with column 'datetime' and datapoint for the relevant timeframe
+    :return: dataframe with column 'datetime' and datapoint
     """
     #TODO: for past context, use difference of actual vs. forecast RES output?
 
@@ -277,34 +279,25 @@ def aggregate_renewables(df_raw,res_type,timeframe,datapoint):
         df.loc[i] = val_list
 
 
-
-    # now = dt.datetime.now().astimezone(pytz.timezone('GMT'))
-    # df_fut = df[df['datetime']>=now][['datetime','dayahead11hforecast']]
-    # df_past = df[df['datetime']<=now][['datetime','realtime','mostrecentforecast']]
-    # df_past = estimate_missing_values(df_past,res_type) #This can be used to enhance data if we want to
-
-    df_filtered_time = filter_df_timeframe(df=df,tf=timeframe)
-
     if datapoint == 'da_f':
-        df_out =  df_filtered_time[['datetime','dayahead11hforecast']]
+        df_out =  df[['datetime','dayahead11hforecast']]
     elif datapoint == 'rt':
-        df_out =  df_filtered_time[['datetime','realtime','mostrecentforecast']]
+        df_out =  df[['datetime','realtime','mostrecentforecast']]
         df_out = estimate_missing_values(df_out,res_type) #This can be used to enhance data if we want to
     else:
         sys.exit("Invalid datapoint")
 
     return df_out
 
-def process_load(df_raw,timeframe,datapoint):
+def process_load(df_raw,datapoint):
     """
     Converts raw elia dataframes with observed and forecasted load to usable dataframes
     Includes data enhancement of unknown values if datapoint is measured real-time load
 
     :param df_raw: pandas dataframe retrieved from Elia data platform
-    :param timeframe: indicates whether this concerns past or future data, str 'past' or 'fut'
     :param datapoint: indicates which column we want to retrieve, str 'da_f' (day-ahead forecast) or 'rt' (measures real-time values)
 
-    :return: dataframe with column 'datetime' and datapoint for the relevant timeframe
+    :return: dataframe with column 'datetime' and datapoint
     """
 
     def estimate_missing_values(df):
@@ -327,12 +320,10 @@ def process_load(df_raw,timeframe,datapoint):
     df = df_raw.reset_index()
     df = df[columns]
 
-    df_filtered_time = filter_df_timeframe(df=df,tf=timeframe)
-
     if datapoint == 'da_f':
-        df_out =  df_filtered_time[['datetime','dayaheadforecast']]
+        df_out =  df[['datetime','dayaheadforecast']]
     elif datapoint == 'rt':
-        df_out =  df_filtered_time[['datetime','measured','mostrecentforecast']]
+        df_out =  df[['datetime','measured','mostrecentforecast']]
         df_out = estimate_missing_values(df_out) #This can be used to enhance data if we want to
     else:
         sys.exit("Invalid datapoint")
@@ -357,16 +348,14 @@ def complement_SI(df_qh,df_min):
 
     est_SI_current = sum(min_filt)/len(min_filt)
 
-
     #Add row to quarter hourly dataframe with estimated SI value for current qh
     latest_qh = last_known_qh + dt.timedelta(minutes=15)
     return_df = df_qh[['datetime','systemimbalance']]
     return_df.loc[len(df_qh)] = [latest_qh,est_SI_current]
 
-
     return return_df
 
-def aggregate_conventional(df_raw,list_gen_types,timeframe):
+def aggregate_conventional(df_raw,list_gen_types):
 
     columns = ['datetime'] + list_gen_types
     df = pd.DataFrame(columns=columns)
@@ -384,29 +373,29 @@ def aggregate_conventional(df_raw,list_gen_types,timeframe):
 
     return df
 
-def filter_df_timeframe(df,tf,ref=None):
-    """
-    Selects the rows of a dataframe in past or future relative to a reference
-
-    :param df: dataframe to be filtered, requires a column named 'datetime'
-    :param tf: timeframe, should be string 'past' or 'future'
-    :param ref: reference compared to which the df is filtered. Should be datetime object with timezone information
-                if no reference provided, 'now' will be used
-
-    :return: filtered df
-    """
-
-    if ref is None:
-        ref = dt.datetime.now().astimezone(pytz.timezone('GMT'))
-
-    if tf == 'past':
-        df_filtered = df[df['datetime']<=ref]
-    elif tf == 'fut':
-        df_filtered = df[df['datetime']>ref]
-    else:
-        sys.exit('Invalid timeframe')
-
-    return df_filtered
+# def filter_df_timeframe(df,tf,ref=None):
+#     """
+#     Selects the rows of a dataframe in past or future relative to a reference
+#
+#     :param df: dataframe to be filtered, requires a column named 'datetime'
+#     :param tf: timeframe, should be string 'past' or 'future'
+#     :param ref: reference compared to which the df is filtered. Should be datetime object with timezone information
+#                 if no reference provided, 'now' will be used
+#
+#     :return: filtered df
+#     """
+#
+#     if ref is None:
+#         ref = dt.datetime.now().astimezone(pytz.timezone('GMT'))
+#
+#     if tf == 'past':
+#         df_filtered = df[df['datetime']<=ref]
+#     elif tf == 'fut':
+#         df_filtered = df[df['datetime']>ref]
+#     else:
+#         sys.exit('Invalid timeframe')
+#
+#     return df_filtered
 
 ######################
 #Create connection object

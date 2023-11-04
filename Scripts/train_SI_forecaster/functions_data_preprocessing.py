@@ -18,7 +18,8 @@ def read_data_h5(input_dict, mode):
     :return: dataframe with selected columns
     """
     loc = input_dict["data_file_loc"]
-    start_date = input_dict["data_from"]
+    start_dt = input_dict["datetime_from"]
+    end_dt = input_dict["datetime_to"]
 
     try:
         cols = input_dict[f"read_cols_{mode}_ctxt"]
@@ -27,11 +28,12 @@ def read_data_h5(input_dict, mode):
 
     df = pd.read_hdf(loc, "data")[cols]
 
-    return df[df.index>start_date]
+    return df[(df.index>=start_dt)&(df.index<end_dt)]
 
-def get_temporal_information(input_dict):
+def get_temporal_information(input_dict,df=None):
     """
-    Function reading all input data and converting that to pre-processed temporal information:
+    Function returning pre-processed temporal information for a given period, which coincides to the period of a given
+    df or specified in the input dictionary. The temporal datapoints are:
         -Boolean on whether it's a working day
         -cyclic information of:
             -month
@@ -41,33 +43,43 @@ def get_temporal_information(input_dict):
     :param input_dict: input dict with information on :
         -location of h5 data file: ['data_file_loc']
         -columns of temporal information to be included in forecasting: ['cols_temp']
+    :param df: dataframe covering a period for which we want temporal information. This df should have:
+        -datetime objects as index, or:
+        -datetime objects in a column named 'datetime'
 
     :return: dataframe with pre-processed columns on temporal information
     """
-    start_date = input_dict["data_from"]
-    loc = input_dict['data_file_loc']
+
     cols = input_dict['cols_temp']
-    df = pd.read_hdf(loc, 'data')
-    df = df[df.index>start_date]
+    if df is None:
+        start_dt = input_dict["datetime_from"]
+        end_dt = input_dict['datetime_to']
+        loc = input_dict['data_file_loc']
+        df = pd.read_hdf(loc, 'data')
+        df = df[(df.index>=start_dt)&(df.index<end_dt)]
+
+    if pd.api.types.is_datetime64_any_dtype(df.index):
+        df.reset_index(inplace=True)  # Convert datetime index to numeric
+        df.rename(columns={'FROM_DATE': 'datetime'},inplace=True)
 
     # Binary workday stuff  TODO: this does not capture 'bridge' days, could be improved by assigning values of 0.5 if a workday is in between two non-working days?
     cal_BE = Belgium()
-    df['Holiday'] = [int(not cal_BE.is_working_day(x.date())) for x in df.index]
-    df['dayofweek'] = df.index.dayofweek  # 0 to 6 max
+    df['Holiday'] = [int(not cal_BE.is_working_day(x.date())) for x in df.datetime]
+    df['dayofweek'] = df.datetime.dt.dayofweek  # 0 to 6 max
     df['weekday'] = convert_binary_dayofweek(df['dayofweek'])
     df['working_day'] = df['weekday'] * (1 - df['Holiday'])
 
     # Cyclic stuff
-    df['month'] = df.index.month - 1  # 0 to 11 max
+    df['month'] = df.datetime.dt.month - 1  # 0 to 11 max
     df['month_cos'], df['month_sin'] = convert_cyclic_info(df['month'])
-    df['hour'] = df.index.hour  ## 0 to 23max
+    df['hour'] = df.datetime.dt.hour  ## 0 to 23max
     df['hour_cos'], df['hour_sin'] = convert_cyclic_info(df['hour'])
-    df['qh'] = df.index.minute / 15  ## 0 to 3 max Multiple of 15 min
+    df['qh'] = df.datetime.dt.minute / 15  ## 0 to 3 max Multiple of 15 min
     df['qh_cos'], df['qh_sin'] = convert_cyclic_info(df['qh'])
 
     df = df[cols]
 
-    return df.reset_index()
+    return df
 
 def convert_cyclic_info(col):
     """

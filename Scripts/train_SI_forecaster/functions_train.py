@@ -8,6 +8,7 @@ import csv
 import copy
 import pandas as pd
 import itertools
+import pickle
 
 
 def get_split_indices(dict):
@@ -373,26 +374,19 @@ def run_training(dict_params,dict_HPs,list_arrays):
 
         list_output_dict.append(outcome_c)
 
-
-    dir = f'output/trained_models/LA_{la}/{store_code}/'
-    os.mkdir(dir)
-
-
     train_time = time.time()-tic
     print(f"Train time: {train_time}")
 
-    save_outcome(list_output_dict,dir)
+    return list_output_dict
 
-def save_outcome(list_dict_outcome, store_code):
+
+def save_outcome(list_dict_outcome, dict_data, store_code):
     # Function saving all information in a list of dicts coming out of the NN training procedure in specified location
-
-
 
     for dict_out in list_dict_outcome:
         path = f"{store_code}config_{dict_out['config']}.pt"
         torch.save(dict_out['best_net'], path)
         del dict_out['best_net']
-
 
     dict_outcome = {}
 
@@ -402,12 +396,16 @@ def save_outcome(list_dict_outcome, store_code):
                 dict_outcome[key] = []
             dict_outcome[key].append(value)
 
-    path = f"{store_code}outcome.csv"
+    path_outcome = f"{store_code}outcome.csv"
+    path_data = f"{store_code}data_dict.pkl"
 
-    with open(path, 'w', newline='') as outfile:
+    with open(path_outcome, 'w', newline='') as outfile:
         writer = csv.writer(outfile)
         writer.writerow(dict_outcome.keys())
         writer.writerows(zip(*dict_outcome.values()))
+
+    with open(path_data, 'wb') as file:
+        pickle.dump(dict_data, file)
 
 def save_outcome_old(dict_outcome, dir, dict_HP = 'NA', weights = []):
     path = dir + 'outcome.csv'
