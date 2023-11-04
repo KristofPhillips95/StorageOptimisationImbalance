@@ -8,7 +8,7 @@ import Data_Elia_API as dea
 import time
 import os
 import pickle
-import json
+import copy
 sys.path.insert(0,"train_SI_forecaster")
 import functions_data_preprocessing as fdp
 
@@ -79,8 +79,8 @@ if __name__ == '__main__':
 
 
     dict_pred = {
-        'lookahead': 5,
-        'lookback': 5,
+        'lookahead': 10,
+        'lookback': 4,
         #'data_past': ['RT_load','DA_F_load','RT_wind','DA_F_wind','RT_pv','DA_F_pv','RT_SI'],
         #'data_fut': ['DA_F_load','DA_F_wind','DA_F_pv','DA_F_nuclear','DA_F_gas'],
         'data_past': dict_datapoints['read_cols_past_ctxt'],
@@ -94,21 +94,26 @@ if __name__ == '__main__':
 
     si_forecaster = load_forecaster(dict=dict_pred,type='imb')
 
-
-
-
     tic = time.time()
     df_past = get_dataframe(list_data=dict_pred['data_past'],steps=dict_pred['lookback'],timeframe='past')
     df_fut = get_dataframe(list_data=dict_pred['data_fut'],steps=dict_pred['lookahead'],timeframe='fut')
-    df_temporal = fdp.get_temporal_information(dict_pred,df_past)
-    data_load_time = time.time()-tic
+    df_temporal_past = fdp.get_temporal_information(dict_pred,copy.deepcopy(df_past))
+    df_temporal_fut = fdp.get_temporal_information(dict_pred,copy.deepcopy(df_fut))
 
-    fut_tensor = convert_df_tensor(df_fut)
-    past_tensor = convert_df_tensor(df_past)
-    temp_tensor =1
+    data_load_time = time.time()-tic
 
     #TODO: add scaling
 
+
+    fut_tensor = convert_df_tensor(df_fut)
+    past_tensor = convert_df_tensor(df_past)
+    past_temp_tensor = convert_df_tensor(df_temporal_past)
+    fut_temp_tensor = convert_df_tensor(df_temporal_fut)
+    past_tensor_temp = torch.cat((past_tensor,past_temp_tensor),dim=2)
+    fut_tensor_temp = torch.cat((fut_tensor,fut_temp_tensor),dim=2)
+
+
+    SI_FC = si_forecaster([past_tensor_temp,fut_tensor_temp]).cpu().detach().numpy()
 
     #SI_FC = si_forecaster([past_tensor,fut_tensor]).detach().numpy()
 
