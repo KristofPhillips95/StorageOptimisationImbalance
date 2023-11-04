@@ -477,6 +477,3 @@ if __name__ == '__main__':
 
     df_solar = connection.get_historical_solar_power_estimation_and_forecast_own(start=start,end=end)
 
-
-
-
