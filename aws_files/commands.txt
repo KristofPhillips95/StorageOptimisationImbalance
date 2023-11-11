@@ -2,8 +2,13 @@
 
 ssh -i ~/.ssh/KristofKULAWS.pem ec2-user@ec2-51-20-92-83.eu-north-1.compute.amazonaws.com
 
+ssh -i ~/.ssh/KristofFirstKeyP.pem ec2-user@ec2-13-51-86-17.eu-north-1.compute.amazonaws.com
+
 ##############
 #FileTransfer#
 ##############
 
 rsync  --progress -e "ssh -i ~/.ssh/KristofKULAWS.pem" OneDrive\ -\ KU\ Leuven/StorageOptimisationImbalance/Scripts/ ec2-user@ec2-51-20-92-83.eu-north-1.compute.amazonaws.com:~/StorageOptimisationImbalance/Scripts -anv
+
+rsync  --progress -e "ssh -i ~/.ssh/KristofFirstKeyP.pem" OneDrive\ -\ KU\ Leuven/StorageOptimisationImbalance/Scripts/ ec2-user@ec2-13-51-86-17.eu-north-1.compute.amazonaws.com:~/StorageOptimisationImbalance/Scripts -anv
+
