@@ -61,6 +61,7 @@ export const handler = async (event, context) => {
               imba_price: requestJSON.imba_price,
               imba_prce_fc : requestJSON.imba_price_fc,
               charge: requestJSON.charge,
+              soc: requestJSON.soc,
             },
           })
         );

@@ -10,11 +10,16 @@ current_time = now.strftime("%H:%M:%S")
 
 ids = [1,2,3,4,5,6,7,8,9,10]
 prices = [0,100,50,40,600,100,20,0,100,0]
-prices_fc = [10,90,40,40,500,200,80,0,40,0]
+prices_fc = [10,90,100,30,500,200,80,0,40,0]
 median_fc = np.median(prices_fc)
 charges = [1 if fc< median_fc else -1 for fc in prices_fc]
 
-for id,imba_price,imba_price_fc,charge in zip(ids,prices,prices_fc,charges):
+socs = [5]
+soc = 5
+for charge in charges:
+    socs.append(soc)
+    soc = soc + charge
+for id,imba_price,imba_price_fc,charge,soc in zip(ids,prices,prices_fc,charges,socs):
     now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
     data = {
@@ -22,7 +27,8 @@ for id,imba_price,imba_price_fc,charge in zip(ids,prices,prices_fc,charges):
         "time": current_time,
         "imba_price": imba_price,
         "imba_price_fc":imba_price_fc,
-        "charge": charge
+        "charge": charge,
+        "soc": soc
     }
 
     print(f"Testing API get", current_time)
