@@ -40,10 +40,6 @@ function MyApp() {
   );
 }
 
-
-
-
-
 export default App_API;
 
 
