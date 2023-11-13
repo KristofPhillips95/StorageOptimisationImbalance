@@ -22,7 +22,7 @@ for charge in charges:
     soc = soc + charge
 for j in range(1,2,1):
     for id,imba_price,imba_price_fc,charge,soc,fc_spread in zip(ids,prices,prices_fc,charges,socs,prices_fc_spread):
-        now = datetime.now()
+        now = datetime.now() 
         current_time = now.strftime("%H:%M:%S")
         data = {
             "id": id*j,
