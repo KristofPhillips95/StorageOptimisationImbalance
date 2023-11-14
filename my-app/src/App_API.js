@@ -12,7 +12,7 @@ function App_API() {
       fetch("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items")
         .then(response => response.json())
         .then(json => {
-          console.log(json); // Check the fetched data
+          // console.log(json); // Check the fetched data
           setData(json);
         })
         .catch(error => console.error(error));
@@ -20,60 +20,50 @@ function App_API() {
   
     const preparePriceChartData = () => {
       const sortedData = data.slice().sort((a, b) => a.id - b.id);
-    
-      const labels = sortedData.map(item => item.time);
+      
+      const last_Data_value = sortedData[sortedData.length -1]
+      
+      const past_times = sortedData.map(item => item.time);
+      let future_times = Object.keys(last_Data_value.fc_spread)
+      future_times = future_times.sort((a, b) => a.localeCompare(b));
+
+      const labels =[...past_times, ...future_times]
+      console.log(last_Data_value.fc_spread)
       const actual_price = sortedData.map(item => item.imba_price);
-      const forecast = sortedData.map(item => item.imba_prce_fc);
-      const forecast_high = sortedData.map(item => item.fc_spread[0]);
-      const forecast_low = sortedData.map(item => item.fc_spread[1]);
+      const forecast_high = [];
+      const forecast_low = [];
+
+      future_times.forEach((time) => {
+        forecast_high.push(last_Data_value.fc_spread[time][0]);
+        forecast_low.push(last_Data_value.fc_spread[time][1]);
+      });
+      // const forecast_low = last_Data_value.map(item => item.fc_spread[1]);
   
-      const forecastRangeData = forecast_high.map((low, index) => ({
-        x: labels[index], // Ensure the x-values match
-        y: low,
-        yMin: low,
-        yMax: forecast_low[index] // Pair the low values with their corresponding high values
-      }));
     
       return {
         labels,
         datasets: [
-          // {
-          //   label: 'IMBA Price',
-          //   data: actual_price,
-          //   fill: false,
-          //   borderColor: 'rgb(75, 192, 192)',
-          //   tension: 0.1
-          // },
           {
-            label: 'IMBA Price forecasted',
-            data: forecast,
+            label: 'IMBA Price',
+            data: actual_price,
             fill: false,
-            borderColor: 'rgb(75, 0, 192)',
+            borderColor: 'rgb(75, 192, 192)',
             tension: 0.1
           },
           {
             label : "forecast high",
-            data: forecast_high,
+            data: [...Array(past_times.length-1).fill(null), ...forecast_high],
             fill: false,
             borderColor: 'rgba(192, 75, 192,0)',
             tension: 0.1
           },
           {
             label: "forecast low",
-            data: forecast_low,
+            data: [...Array(past_times.length -1).fill(null), ...forecast_low],
             fill: "-1",
             borderColor: 'rgba(0, 75, 192,0)',
             tension: 0.1
           }
-          // ,
-          // {
-          //   label: 'forecast range',
-          //   data: fore,
-          //   fill: '-1',
-          //   backgroundColor: 'rgba(192, 75, 192, 0.2)',
-          //   borderColor: 'rgb(0, 75, 192)',
-          //   tension: 0.1
-          // }
         ]
       };
     };
@@ -184,7 +174,7 @@ function App_API() {
           )}
         </div>
   
-        <div>
+        <div style={{ width: '600px', height: '300px', margin: '10px' }}>
           {renderProfitTable()}
         </div>
       </div>
