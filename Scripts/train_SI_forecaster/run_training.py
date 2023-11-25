@@ -1,5 +1,7 @@
 import sys
 sys.path.insert(0,"../data_preprocessing")
+sys.path.insert(0,"../scaling")
+import scaling
 import functions_train as ft
 import functions_data_preprocessing as fdp
 import numpy as np
@@ -19,7 +21,7 @@ if __name__ == '__main__':
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
         'datetime_from': datetime(2017,1,1,0,0,0),
-        'datetime_to': datetime(2017,2,1,0,0,0),
+        'datetime_to': datetime(2023,9,1,0,0,0),
         'batch_size': 64,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [5/7,1/7,1/7],
@@ -30,12 +32,16 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         'n_configs': 3, #Number of HP configurations
-        'store_code': '20231103_test',
+        'store_code': '20231125_test',
         'epochs': 2,
-        'patience': 25
+        'patience': 25,
+        'loc_scaler': "../scaling/Scaling_values.xlsx",
+        "unscale_labels":True
     }
 
 
+
+    #scaler = scaling.Scaler(idd['loc_scaler'])
 
     df_past_ctxt = fdp.read_data_h5(input_dict=idd, mode='past')#.drop(["FROM_DATE"],axis=1)
     df_fut_ctxt = fdp.read_data_h5(input_dict=idd, mode='fut')#.drop(["FROM_DATE"],axis=1)
@@ -46,8 +52,8 @@ if __name__ == '__main__':
     array_temp = df_temporal.to_numpy()
 
     #Extend arrays (for RNN input)
-    array_ext_past_ctxt, array_ext_fut_ctxt,array_ext_past_temp,array_ext_fut_temp = fdp.get_3d_arrays(past_ctxt=array_past_ctxt,fut_ctxt = array_fut_ctxt,temp = array_temp, lookahead = 10, lookback = 4)
-    labels_ext = fdp.get_3d_arrays_labels(labels = df_past_ctxt[idd['target_col']].to_numpy(),lookahead=10,lookback=4,n_quantiles = len(idd['list_quantiles']))
+    array_ext_past_ctxt, array_ext_fut_ctxt,array_ext_past_temp,array_ext_fut_temp = fdp.get_3d_arrays(past_ctxt=array_past_ctxt,fut_ctxt=array_fut_ctxt,temp=array_temp,input_dict=idd)
+    labels_ext = fdp.get_3d_arrays_labels(labels = df_past_ctxt,input_dict=idd)
 
     array_ext_past = np.concatenate((array_ext_past_ctxt,array_ext_past_temp),axis=2)
     array_ext_fut = np.concatenate((array_ext_fut_ctxt,array_ext_fut_temp),axis=2)
@@ -72,9 +78,9 @@ if __name__ == '__main__':
 
     hp_dict = {
         'input_size_e': [ise], #not a hyperparameter?
-        'hidden_size_lstm': [128,64],
-        'layers_lstm': [2,1],
-        'lr': [0.0001,0.001],
+        'hidden_size_lstm': [64],
+        'layers_lstm': [1],
+        'lr': [0.001],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         'input_size_d': [isd], #not a hyperparameter?
         #'input_size_past_t': [1 for i in range(idd['n_configs'])],  # TODO: not doing anything right now? Check

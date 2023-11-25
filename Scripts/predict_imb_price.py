@@ -120,6 +120,10 @@ if __name__ == '__main__':
 
     print('hello world')
 
+    fc = pred_SI()
+
+    x=1
+
     #SI_FC = si_forecaster([past_tensor,fut_tensor]).detach().numpy()
 
 
