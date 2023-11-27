@@ -20,7 +20,7 @@ if __name__ == '__main__':
         'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
-        'datetime_from': datetime(2017,1,1,0,0,0),
+        'datetime_from': datetime(2020,1,1,0,0,0),
         'datetime_to': datetime(2023,9,1,0,0,0),
         'batch_size': 64,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
@@ -32,9 +32,9 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         'n_configs': 3, #Number of HP configurations
-        'store_code': '20231125_test',
-        'epochs': 2,
-        'patience': 25,
+        'store_code': '20231125',
+        'epochs': 100,
+        'patience': 10,
         'loc_scaler': "../scaling/Scaling_values.xlsx",
         "unscale_labels":True
     }
@@ -78,8 +78,8 @@ if __name__ == '__main__':
 
     hp_dict = {
         'input_size_e': [ise], #not a hyperparameter?
-        'hidden_size_lstm': [64],
-        'layers_lstm': [1],
+        'hidden_size_lstm': [64,128],
+        'layers_lstm': [1,2],
         'lr': [0.001],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         'input_size_d': [isd], #not a hyperparameter?
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     la = idd['lookahead']
     store_code = idd['store_code']
     dir = f'output/trained_models/LA_{la}/{store_code}/'
-    os.mkdir(dir)
+    os.mkdir(dir) #TODO place before training
 
     dict_data = {key:idd[key] for key in ['read_cols_past_ctxt','read_cols_fut_ctxt','cols_temp']}
 

@@ -10,6 +10,7 @@ import os
 import pickle
 import copy
 sys.path.insert(0,"train_SI_forecaster")
+sys.path.insert(0,"scaling")
 import functions_data_preprocessing as fdp
 import scaling
 
@@ -73,6 +74,7 @@ def pred_SI():
     dir = f'train_SI_forecaster/output/trained_models/LA_{la}/{store_code}/'
     config = 1
     path_data = f"{dir}data_dict.pkl"
+    loc_scaling = "../scaling/Scaling_values.xlsx"
 
     with open(path_data, 'rb') as file:
         dict_datapoints = pickle.load(file)
@@ -86,11 +88,12 @@ def pred_SI():
         'data_fut': dict_datapoints['read_cols_fut_ctxt'],
         'cols_temp': dict_datapoints['cols_temp'],
         # 'loc_SI_FC': 'train_SI_forecaster/output/trained_models/LA_10/20230503/config_3.pt',
-        'loc_SI_FC': 'train_SI_forecaster/output/trained_models/LA_10/20231103_test/config_1.pt',
+        'loc_SI_FC': 'train_SI_forecaster/output/trained_models/LA_10/20231125/config_1.pt',
         'loc_price_FC': ''
     }
 
     si_forecaster = load_forecaster(dict=dict_pred, type='imb')
+    scaler = scaling.Scaler(loc_scaling)
 
     tic = time.time()
     df_past = get_dataframe(list_data=dict_pred['data_past'], steps=dict_pred['lookback'], timeframe='past')

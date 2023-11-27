@@ -16,7 +16,7 @@ def scale_data(df=None,loc=None,ks=None):
 
 
 
-    df_scaling = pd.read_excel("Scaling_values.xlsx")
+    df_scaling = pd.read_excel("scaling/Scaling_values.xlsx")
 
     dict_col_scaling_values = {
         "ACE": "ACE",
