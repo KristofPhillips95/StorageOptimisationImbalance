@@ -4,6 +4,8 @@ import datetime as dt
 import sys
 from workalendar.europe import Belgium
 sys.path.insert(0,"../data_preprocessing")
+sys.path.insert(0,"../scaling")
+import scaling
 
 
 def read_data_h5(input_dict, mode):
@@ -151,7 +153,9 @@ def get_training_indices(list_dataframes, lookahead, lookback):
 
     return list_of_indices
 
-def get_3d_arrays(past_ctxt, fut_ctxt, temp, lookahead, lookback):
+def get_3d_arrays(past_ctxt, fut_ctxt, temp, input_dict):
+    lookahead = input_dict['lookahead']
+    lookback = input_dict['lookback']
     n_ex = past_ctxt.shape[0] - lookahead - lookback
     n_cols_past_ctxt = past_ctxt.shape[1]
     n_cols_fut_ctxt = fut_ctxt.shape[1]
@@ -175,7 +179,17 @@ def get_3d_arrays(past_ctxt, fut_ctxt, temp, lookahead, lookback):
 
     return past_ctxt_ext, fut_ctxt_ext, past_temp_ext, fut_temp_ext
 
-def get_3d_arrays_labels(labels, lookahead, lookback, n_quantiles):
+def get_3d_arrays_labels(labels,input_dict):
+
+    if input_dict['unscale_labels']:
+        scaler = scaling.Scaler(input_dict['loc_scaler'])
+        labels = scaler.unscale_col(labels,input_dict['target_col'])
+
+    labels=labels[input_dict['target_col']].to_numpy()
+
+    lookahead = input_dict['lookahead']
+    lookback = input_dict['lookback']
+    n_quantiles = len(input_dict['list_quantiles'])
     n_ex = labels.shape[0] - lookahead - lookback
     labels_ext = np.zeros((n_ex, lookahead, n_quantiles))
 
