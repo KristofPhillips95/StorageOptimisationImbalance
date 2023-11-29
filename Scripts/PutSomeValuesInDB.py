@@ -22,7 +22,7 @@ for charge in charges:
     socs.append(soc)
 
 
-for j in range(1, 2, 1):
+for j in range(1, 5, 1):
     for id, imba_price, imba_price_fc, charge, soc in zip(ids, prices, prices_fc, charges, socs):
         some_time = time + datetime.timedelta(minutes=15 * id)
         some_time_str = some_time.strftime("%H:%M:%S")

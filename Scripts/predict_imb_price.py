@@ -51,7 +51,8 @@ def convert_df_tensor(df):
         pass
     np_array = df.to_numpy()
     tensor = torch.from_numpy(np_array)
-    tensor = tensor[None,:,:].float().to('cuda')
+    # tensor = tensor[None,:,:].float().to('cuda')
+    tensor = tensor[None, :, :].float().to('cpu')
 
     return tensor
 
@@ -62,7 +63,7 @@ def load_forecaster(dict,type):
     elif type == 'price':
         loc = dict['loc_SI_FC']
 
-    model = torch.load(loc)
+    model = torch.load(loc,map_location='cpu')
 
     return model
 
@@ -111,7 +112,8 @@ def pred_SI():
     past_tensor_temp = torch.cat((past_tensor, past_temp_tensor), dim=2)
     fut_tensor_temp = torch.cat((fut_tensor, fut_temp_tensor), dim=2)
 
-    SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).cpu().detach().numpy()
+    # SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).cpu().detach().numpy()
+    SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).detach().numpy()
 
     return SI_FC
 
