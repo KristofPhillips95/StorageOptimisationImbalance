@@ -67,14 +67,28 @@ def load_forecaster(dict,type,dev):
     model = torch.load(loc,map_location='cpu')
     model.set_device(dev)
 
-    return model
+    slash_index = loc.rfind("/")
+    loc_folder = loc[:slash_index+1]
+    loc_data = loc_folder+"data_dict.pkl"
 
-def pred_SI(dev):
+    with open(loc_data,'rb') as file:
+        model_data = pickle.load(file)
+
+    return model, model_data
+
+def pred_SI(dev='cpu'):
 
     """
-    Function
-    args:
-    output:
+    Function returning the RT forecast of the SI
+
+    Parameters:
+        - dev: str, optional
+            device to which the forecasting model should be loaded: 'cpu' or 'cuda'
+
+    Returns:
+        - SI_FC: 2d numpy array with SI forecast. Lookahead instances are along dim 0, pre-determined quantiles along dim 1
+        - curr_SI: single value of latest SI. #TODO: currently, this is the imperfect approximation of the SI at the running qh. Adjust this flow of data(?)
+        - quantiles: Pre-determined quantiles of SI forecast
     """
 
     la = 10
@@ -99,7 +113,8 @@ def pred_SI(dev):
         'loc_price_FC': ''
     }
 
-    si_forecaster = load_forecaster(dict=dict_pred,type='imb',dev=dev)
+    si_forecaster, model_data = load_forecaster(dict=dict_pred,type='imb',dev=dev)
+    quantiles = model_data['list_quantiles']
     scaler = scaling.Scaler(loc_scaling)
 
     tic = time.time()
@@ -123,7 +138,7 @@ def pred_SI(dev):
 
     SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).detach().numpy()
 
-    return SI_FC
+    return SI_FC, quantiles
 
 
 if __name__ == '__main__':

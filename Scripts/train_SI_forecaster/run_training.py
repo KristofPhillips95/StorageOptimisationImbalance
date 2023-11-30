@@ -30,8 +30,8 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         'n_configs': 3, #Number of HP configurations
-        'store_code': '20231126',
-        'epochs': 100,
+        'store_code': '20231130_test',
+        'epochs': 1,
         'patience': 20,
         'loc_scaler': "../scaling/Scaling_values.xlsx",
         "unscale_labels":True
@@ -74,9 +74,9 @@ if __name__ == '__main__':
 
     hp_dict = {
         'input_size_e': [ise], #not a hyperparameter?
-        'hidden_size_lstm': [32,64,128],
-        'layers_lstm': [1,2],
-        'lr': [0.001,0.0001],
+        'hidden_size_lstm': [32],
+        'layers_lstm': [1],
+        'lr': [0.001],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         'input_size_d': [isd], #not a hyperparameter?
         #'input_size_past_t': [1 for i in range(idd['n_configs'])],  # TODO: not doing anything right now? Check
@@ -96,7 +96,7 @@ if __name__ == '__main__':
 
 
 
-    dict_data = {key:idd[key] for key in ['read_cols_past_ctxt','read_cols_fut_ctxt','cols_temp']}
+    dict_data = {key:idd[key] for key in ['read_cols_past_ctxt','read_cols_fut_ctxt','cols_temp','list_quantiles']}
 
     ft.save_outcome(list_output_dict,dict_data,dir)
 
