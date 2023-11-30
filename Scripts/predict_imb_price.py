@@ -87,7 +87,7 @@ def pred_SI(dev='cpu'):
 
     Returns:
         - SI_FC: 2d numpy array with SI forecast. Lookahead instances are along dim 0, pre-determined quantiles along dim 1
-        - curr_SI: single value of latest SI. #TODO: currently, this is the imperfect approximation of the SI at the running qh. Adjust this flow of data(?)
+        - last_si_value: single value of latest SI. #TODO: currently, this is the imperfect approximation of the SI at the running qh. Adjust this flow of data(?)
         - quantiles: Pre-determined quantiles of SI forecast
     """
 
@@ -119,15 +119,17 @@ def pred_SI(dev='cpu'):
 
     tic = time.time()
     df_past = get_dataframe(list_data=dict_pred['data_past'], steps=dict_pred['lookback'], timeframe='past')
+    latest_index = df_past['datetime'].idxmax()
+    last_si_value = df_past.at[latest_index,'SI']
+
     df_past_scaled = scaling.scale_data(df_past.drop(['datetime'], axis=1))
-    df_fut = get_dataframe(list_data=dict_pred['data_fut'], steps=dict_pred['lookahead'], timeframe='fut')
+,    df_fut = get_dataframe(list_data=dict_pred['data_fut'], steps=dict_pred['lookahead'], timeframe='fut')
     df_past_scaled = scaling.scale_data(df_fut.drop(['datetime'], axis=1))
     df_temporal_past = fdp.get_temporal_information(dict_pred, copy.deepcopy(df_past))
     df_temporal_fut = fdp.get_temporal_information(dict_pred, copy.deepcopy(df_fut))
 
     data_load_time = time.time() - tic
-
-    # TODO: add scaling
+    print(f"Total time for loading data: {data_load_time}s")
 
     fut_tensor = convert_df_tensor(df_fut)
     past_tensor = convert_df_tensor(df_past)
@@ -138,7 +140,9 @@ def pred_SI(dev='cpu'):
 
     SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).detach().numpy()
 
-    return SI_FC, quantiles
+
+
+    return SI_FC, last_si_value quantiles
 
 
 if __name__ == '__main__':
