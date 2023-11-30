@@ -71,6 +71,12 @@ def load_forecaster(dict,type,dev):
 
 def pred_SI(dev):
 
+    """
+    Function
+    args:
+    output:
+    """
+
     la = 10
     store_code = "20231103_test"
     dir = f'train_SI_forecaster/output/trained_models/LA_{la}/{store_code}/'
@@ -89,8 +95,7 @@ def pred_SI(dev):
         'data_past': dict_datapoints['read_cols_past_ctxt'],
         'data_fut': dict_datapoints['read_cols_fut_ctxt'],
         'cols_temp': dict_datapoints['cols_temp'],
-        # 'loc_SI_FC': 'train_SI_forecaster/output/trained_models/LA_10/20230503/config_3.pt',
-        'loc_SI_FC': 'train_SI_forecaster/output/trained_models/LA_10/20231125/config_1.pt',
+        'loc_SI_FC': 'train_SI_forecaster/output/models_production/LA_10/20231126/config_9.pt',
         'loc_price_FC': ''
     }
 
@@ -116,7 +121,6 @@ def pred_SI(dev):
     past_tensor_temp = torch.cat((past_tensor, past_temp_tensor), dim=2)
     fut_tensor_temp = torch.cat((fut_tensor, fut_temp_tensor), dim=2)
 
-    # SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).cpu().detach().numpy()
     SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).detach().numpy()
 
     return SI_FC
