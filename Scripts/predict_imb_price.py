@@ -123,7 +123,7 @@ def pred_SI(dev='cpu'):
     last_si_value = df_past.at[latest_index,'SI']
 
     df_past_scaled = scaling.scale_data(df_past.drop(['datetime'], axis=1))
-,    df_fut = get_dataframe(list_data=dict_pred['data_fut'], steps=dict_pred['lookahead'], timeframe='fut')
+    df_fut = get_dataframe(list_data=dict_pred['data_fut'], steps=dict_pred['lookahead'], timeframe='fut')
     df_past_scaled = scaling.scale_data(df_fut.drop(['datetime'], axis=1))
     df_temporal_past = fdp.get_temporal_information(dict_pred, copy.deepcopy(df_past))
     df_temporal_fut = fdp.get_temporal_information(dict_pred, copy.deepcopy(df_fut))
