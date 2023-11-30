@@ -4,6 +4,7 @@ import os
 import requests
 import numpy as np
 
+api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
 ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 prices = [0, 100, 50, 40, 200, 100, 20, 0, 100, 100]
 prices_fc = [10, 90, 100, 30, 180, 200, 80, 0, 40, 0]
@@ -22,7 +23,7 @@ for charge in charges:
     socs.append(soc)
 
 
-for j in range(1, 5, 1):
+for j in range(1, 2, 1):
     for id, imba_price, imba_price_fc, charge, soc in zip(ids, prices, prices_fc, charges, socs):
         some_time = time + datetime.timedelta(minutes=15 * id)
         some_time_str = some_time.strftime("%H:%M:%S")
@@ -49,5 +50,5 @@ for j in range(1, 5, 1):
         #
         print(f"Writing now to API:", some_time_str)
 
-        response = requests.put("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items", json=data)
+        response = requests.put(api_link, json=data)
         print(response.text)
