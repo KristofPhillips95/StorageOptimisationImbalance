@@ -106,6 +106,12 @@ class LSTM_ED(torch.nn.Module):
         out = torch.squeeze(self.fc(output_d))  # Final Output
         return out
 
+    def set_device(self,dev):
+        self.dev = dev
+        self.lstm_e.to(dev)
+        self.lstm_d.to(dev)
+        self.fc.to(dev)
+
 
 """
 Bi-directional RNNs with attention by chatgpt

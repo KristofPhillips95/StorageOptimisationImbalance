@@ -12,8 +12,6 @@ import os
 
 if __name__ == '__main__':
 
-
-
     idd = {
         'data_file_loc': "../data_preprocessing/data_scaled.h5",
         'read_cols_past_ctxt': ['SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc'],
@@ -38,8 +36,6 @@ if __name__ == '__main__':
         'loc_scaler': "../scaling/Scaling_values.xlsx",
         "unscale_labels":True
     }
-
-
 
     #scaler = scaling.Scaler(idd['loc_scaler'])
 

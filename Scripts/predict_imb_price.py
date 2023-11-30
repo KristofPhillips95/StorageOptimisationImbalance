@@ -57,7 +57,7 @@ def convert_df_tensor(df):
 
     return tensor
 
-def load_forecaster(dict,type):
+def load_forecaster(dict,type,dev):
 
     if type == 'imb':
         loc = dict['loc_SI_FC']
@@ -65,17 +65,18 @@ def load_forecaster(dict,type):
         loc = dict['loc_SI_FC']
 
     model = torch.load(loc,map_location='cpu')
+    model.set_device(dev)
 
     return model
 
-def pred_SI():
+def pred_SI(dev):
 
     la = 10
     store_code = "20231103_test"
     dir = f'train_SI_forecaster/output/trained_models/LA_{la}/{store_code}/'
     config = 1
     path_data = f"{dir}data_dict.pkl"
-    loc_scaling = "../scaling/Scaling_values.xlsx"
+    loc_scaling = "scaling/Scaling_values.xlsx"
 
     with open(path_data, 'rb') as file:
         dict_datapoints = pickle.load(file)
@@ -93,7 +94,7 @@ def pred_SI():
         'loc_price_FC': ''
     }
 
-    si_forecaster = load_forecaster(dict=dict_pred, type='imb')
+    si_forecaster = load_forecaster(dict=dict_pred,type='imb',dev=dev)
     scaler = scaling.Scaler(loc_scaling)
 
     tic = time.time()
@@ -123,9 +124,9 @@ def pred_SI():
 
 if __name__ == '__main__':
 
-    print('hello world')
+    dev = 'cpu'
 
-    fc = pred_SI()
+    fc = pred_SI(dev=dev)
 
     x=1
 
