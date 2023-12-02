@@ -93,7 +93,9 @@ def pred_SI(dev='cpu'):
 
     la = 10
     store_code = "20231103_test"
+    store_code = "20231126"
     dir = f'train_SI_forecaster/output/trained_models/LA_{la}/{store_code}/'
+    dir = f'train_SI_forecaster/output/models_production/LA_{la}/{store_code}/'
     config = 1
     path_data = f"{dir}data_dict.pkl"
     loc_scaling = "scaling/Scaling_values.xlsx"
@@ -121,6 +123,7 @@ def pred_SI(dev='cpu'):
     df_past = get_dataframe(list_data=dict_pred['data_past'], steps=dict_pred['lookback'], timeframe='past')
     latest_index = df_past['datetime'].idxmax()
     last_si_value = df_past.at[latest_index,'SI']
+    last_si_time = df_past.at[latest_index, 'datetime']
 
     df_past_scaled = scaling.scale_data(df_past.drop(['datetime'], axis=1))
     df_fut = get_dataframe(list_data=dict_pred['data_fut'], steps=dict_pred['lookahead'], timeframe='fut')
@@ -142,7 +145,7 @@ def pred_SI(dev='cpu'):
 
 
 
-    return SI_FC, last_si_value quantiles
+    return SI_FC, (last_si_value,last_si_time), quantiles
 
 
 if __name__ == '__main__':
@@ -150,7 +153,6 @@ if __name__ == '__main__':
     dev = 'cpu'
 
     fc = pred_SI(dev=dev)
-
     x=1
 
     #SI_FC = si_forecaster([past_tensor,fut_tensor]).detach().numpy()
