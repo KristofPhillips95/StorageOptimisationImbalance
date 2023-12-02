@@ -1,3 +1,5 @@
 
 Scripts/__pycache__/
 Scripts/train_SI_forecaster/output/trained_models/
+
+.idea/
