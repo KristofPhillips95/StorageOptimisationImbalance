@@ -5,3 +5,7 @@ Scripts/train_SI_forecaster/output/trained_models/
 .idea/
 
 Scripts/.ipynb_checkpoints/
+
+Scripts/train_SI_forecaster/__pycache__/
+
+Scripts/scaling/__pycache__/
