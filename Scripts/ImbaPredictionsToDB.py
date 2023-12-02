@@ -5,7 +5,7 @@ import predict_imb_price
 
 SI_FC, last_si, quantiles = predict_imb_price.pred_SI(dev='cpu')
 
-id = 11
+id = 10
 api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
 
 prices_fc_spread = dict()
@@ -20,7 +20,7 @@ for i, fc_time in enumerate(fc_times):
 
 data = {
     "id": id,
-    "time": last_si_time.strftime('%Y-%m-%d %H:%M:%S'),
+    "time": last_si_time.strftime('%H:%M:%S'),
     "imba_price": last_si[0],
     "imba_price_fc": 1,
     "charge": 1,
