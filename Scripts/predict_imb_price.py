@@ -51,6 +51,7 @@ def convert_df_tensor(df):
     except:
         pass
     np_array = df.to_numpy()
+    np_array= np_array.astype(float)
     tensor = torch.from_numpy(np_array)
     # tensor = tensor[None,:,:].float().to('cuda')
     tensor = tensor[None, :, :].float().to('cpu')
