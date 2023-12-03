@@ -15,7 +15,7 @@ def try_creating_item(index):
     SI_FC, last_si, quantiles = pred_SI(dev='cpu')
     prices_fc_spread = dict()
     last_si_time = last_si[1] + datetime.timedelta(minutes=60)
-    fc_times = [(last_si_time + datetime.timedelta(minutes=15 * fc_step)).strftime("%H:%M:%S") for fc_step in
+    fc_times = [(last_si_time + datetime.timedelta(minutes=15 * (fc_step+1))).strftime("%H:%M:%S") for fc_step in
                 range(SI_FC.shape[0])]
     print(SI_FC.shape)
     writing_time = datetime.datetime.now().strftime('%H:%M:%S')
