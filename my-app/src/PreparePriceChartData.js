@@ -20,7 +20,7 @@ export function prepareImbalanceChartData(data) {
     const nb_qs =9
     // Generate an array of colors with different transparencies
     const datasetColors = future_times.map((time, index) => {
-      const alpha = -(Math.abs(index/nb_qs -1/2) -1 ) ; // Adjust as needed
+      const alpha = -((Math.abs(index/nb_qs -1/2) -1 )) * (-((Math.abs(index/nb_qs -1/2) -1 )))  ; // Adjust as needed
       return `rgba(105, 105, 105, ${alpha})`; // Dark grey with varying transparency
     });
           
