@@ -12,8 +12,8 @@ prices_fc_spread = dict()
 
 prices_fc_spread = dict()
 last_si_time = last_si[1]
-fc_times = [(last_si_time + datetime.timedelta(minutes=15 * fc_step)).strftime("%H:%M:%S") for fc_step in range(8)]
-
+fc_times = [(last_si_time + datetime.timedelta(minutes=15 * fc_step)).strftime("%H:%M:%S") for fc_step in range(SI_FC.shape[0])]
+writing_time = datetime.datetime.now().strftime('%H:%M:%S')
 for i, fc_time in enumerate(fc_times):
     prices_fc_spread[fc_time] = [str(SI_FC[i,q]) for q in range(SI_FC.shape[1]) ]
 
@@ -26,7 +26,8 @@ data = {
     "charge": 1,
     "soc": 1,
     "fc_spread": prices_fc_spread,
-    "quantiles": quantiles
+    "quantiles": quantiles,
+    "writing_time": writing_time
 }
 
 # data = {
@@ -39,7 +40,7 @@ data = {
 #     "fc_spread": prices_fc_spread
 # }
 
-print(f"Writing now to API:",last_si_time)
+print(f"Writing now to API:",writing_time)
 
 response = requests.put(api_link, json=data)
 print(response.text)
