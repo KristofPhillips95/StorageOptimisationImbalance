@@ -5,22 +5,36 @@ export function prepareImbalanceChartData(data) {
         console.log("Data is still null or undefined. Fetching in progress or failed.");
         return { labels: [], datasets: [] };
       }
-    const sortedData = data.slice().sort((a, b) => a.id - b.id);
-  
-    const last_Data_value = sortedData[sortedData.length - 1];
-  
+    const sortedData = data.slice().sort((a, b) => a.id - b.id).slice(-8);
     const past_times = sortedData.map(item => item.time);
+
+    const last_Data_value = sortedData[sortedData.length - 1];
+    
     let future_times = Object.keys(last_Data_value.fc_spread);
     future_times = future_times.sort((a, b) => a.localeCompare(b));
+    const quantiles = last_Data_value.quantiles
   
     const x_labels = [...past_times, ...future_times];
     const actual_imba = sortedData.map(item => item.imba_price);
   
     const forecasts = [];
-    const nb_qs =9
-    // Generate an array of colors with different transparencies
+    const nb_qs =quantiles.length
+    // // Generate an array of colors with different transparencies
+    // const datasetColors = future_times.map((time, index) => {
+    //   const alpha = -((Math.abs(index/nb_qs -1/2) -1 )) * (-((Math.abs(index/nb_qs -1/2) -1 )))  ; // Adjust as needed
+    //   return `rgba(105, 105, 105, ${alpha})`; // Dark grey with varying transparency
+    // });
+      // Generate an array of colors with different transparencies
     const datasetColors = future_times.map((time, index) => {
-      const alpha = -((Math.abs(index/nb_qs -1/2) -1 )) * (-((Math.abs(index/nb_qs -1/2) -1 )))  ; // Adjust as needed
+      let q_prev = 1 
+      if (index > 0) {
+        q_prev = quantiles[index-1]
+      }
+      else{
+        q_prev = 0
+      }
+      const alpha = -(q_prev - quantiles[index])*4; // Adjust as needed
+
       return `rgba(105, 105, 105, ${alpha})`; // Dark grey with varying transparency
     });
           
