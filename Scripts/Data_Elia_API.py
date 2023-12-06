@@ -227,7 +227,8 @@ def aggregate_renewables(df_raw,res_type,datapoint):
             rt_vs_mrf = last_row['realtime']-last_row['mostrecentforecast']
 
             #fill nan values
-            df['realtime'] = np.maximum(df['realtime'].mask(df['realtime'].isna(),df['mostrecentforecast']+rt_vs_mrf),0)
+            mask = df['realtime'].isna()
+            df.loc[mask, 'realtime'] = np.maximum(df.loc[mask, 'mostrecentforecast'] + rt_vs_mrf, 0)
 
             return df[['datetime', 'realtime']]
 
@@ -257,10 +258,12 @@ def aggregate_renewables(df_raw,res_type,datapoint):
             if dt_last_nonzero_rt > dt_last_zero_fc:
                 last_row = df_known_values.loc[df_known_values['datetime'].idxmax()]
                 rt_vs_mrf = last_row['realtime'] - last_row['mostrecentforecast']
+                mask = (df['realtime']==0) & (df['datetime'] > dt_last_nonzero_rt)
+                df.loc[mask, 'realtime'] = np.maximum(df.loc[mask, 'mostrecentforecast'] + rt_vs_mrf, 0)
 
-                df['realtime'] = np.maximum(df['realtime'].mask((df['realtime']==0) & (df['datetime']>dt_last_nonzero_rt), df['mostrecentforecast'] + rt_vs_mrf),0)
             else:
-                df['realtime'] = df['realtime'].mask((df['realtime']==0) & (df['datetime']>dt_last_nonzero_rt),df['mostrecentforecast'])
+                mask = (df['realtime']==0) & (df['datetime'] > dt_last_nonzero_rt)
+                df.loc[mask, 'realtime'] = df.loc[mask, 'mostrecentforecast']
 
             return df[['datetime','realtime']]
 
@@ -314,7 +317,8 @@ def process_load(df_raw,datapoint):
         rt_vs_mrf_rel = last_row['measured'] / last_row['mostrecentforecast']
 
         #fill nan values
-        df['measured'] = df['measured'].mask(df['measured'].isna(),df['mostrecentforecast']*rt_vs_mrf_rel)
+        mask = df['measured'].isna()
+        df.loc[mask, 'measured'] = df.loc[mask, 'mostrecentforecast'] * rt_vs_mrf_rel
 
         return df[['datetime', 'measured']]
 
@@ -353,7 +357,7 @@ def complement_SI(df_qh,df_min):
 
     #Add row to quarter hourly dataframe with estimated SI value for current qh
     latest_qh = last_known_qh + dt.timedelta(minutes=15)
-    return_df = df_qh[['datetime','systemimbalance']]
+    return_df = df_qh[['datetime','systemimbalance']].copy()
     return_df.loc[len(df_qh)] = [latest_qh,est_SI_current]
 
     return return_df
