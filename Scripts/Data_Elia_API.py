@@ -19,8 +19,10 @@ def get_dataframes(list_data,start,end):
 
     for i,datapoint in enumerate(list_data):
 
+        print(f"Start loading {datapoint}")
         df = get_specific_df(datapoint,start,end)
         list_df.append(df)
+        print(f"loaded {datapoint}")
         if i == 0:
             df_all = df
         else:
@@ -200,7 +202,6 @@ def aggregate_renewables(df_raw,res_type,datapoint):
         if res_type == 'solar':
             val = df_filt[df_filt['region']=='Belgium'][col].values[0]
         elif res_type == 'wind':
-            print(col)
             try:
                 val = sum(df_filt[col].values)
             except:
@@ -313,8 +314,12 @@ def process_load(df_raw,datapoint):
 
         #Filter out nan
         df_limited = df[df['measured'].notnull()]
-        last_row = df_limited.loc[df_limited['datetime'].idxmax()]
-        rt_vs_mrf_rel = last_row['measured'] / last_row['mostrecentforecast']
+        try:
+            last_row = df_limited.loc[df_limited['datetime'].idxmax()]
+            rt_vs_mrf_rel = last_row['measured'] / last_row['mostrecentforecast']
+        except:
+            print("Warning: no latest measured load available, reverting to most recent forecast")
+            rt_vs_mrf_rel = 1
 
         #fill nan values
         mask = df['measured'].isna()

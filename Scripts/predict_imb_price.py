@@ -93,10 +93,8 @@ def pred_SI(dev='cpu'):
     """
 
     la = 10
-    store_code = "20231103_test"
-    store_code = "20231126"
-    dir = f'train_SI_forecaster/output/trained_models/LA_{la}/{store_code}/'
-    dir = f'train_SI_forecaster/output/models_production/LA_{la}/{store_code}/'
+    loc_fc = "20231126"
+    dir = f'train_SI_forecaster/output/models_production/LA_{la}/{loc_fc}/'
     config = 1
     path_data = f"{dir}data_dict.pkl"
     loc_scaling = "scaling/Scaling_values.xlsx"
@@ -107,8 +105,6 @@ def pred_SI(dev='cpu'):
     dict_pred = {
         'lookahead': 10,
         'lookback': 4,
-        # 'data_past': ['RT_load','DA_F_load','RT_wind','DA_F_wind','RT_pv','DA_F_pv','RT_SI'],
-        # 'data_fut': ['DA_F_load','DA_F_wind','DA_F_pv','DA_F_nuclear','DA_F_gas'],
         'data_past': dict_datapoints['read_cols_past_ctxt'],
         'data_fut': dict_datapoints['read_cols_fut_ctxt'],
         'cols_temp': dict_datapoints['cols_temp'],
@@ -128,15 +124,15 @@ def pred_SI(dev='cpu'):
 
     df_past_scaled = scaling.scale_data(df_past.drop(['datetime'], axis=1))
     df_fut = get_dataframe(list_data=dict_pred['data_fut'], steps=dict_pred['lookahead'], timeframe='fut')
-    df_past_scaled = scaling.scale_data(df_fut.drop(['datetime'], axis=1))
+    df_fut_scaled = scaling.scale_data(df_fut.drop(['datetime'], axis=1))
     df_temporal_past = fdp.get_temporal_information(dict_pred, copy.deepcopy(df_past))
     df_temporal_fut = fdp.get_temporal_information(dict_pred, copy.deepcopy(df_fut))
 
     data_load_time = time.time() - tic
     print(f"Total time for loading data: {data_load_time}s")
 
-    fut_tensor = convert_df_tensor(df_fut)
-    past_tensor = convert_df_tensor(df_past)
+    fut_tensor = convert_df_tensor(df_fut_scaled)
+    past_tensor = convert_df_tensor(df_past_scaled)
     past_temp_tensor = convert_df_tensor(df_temporal_past)
     fut_temp_tensor = convert_df_tensor(df_temporal_fut)
     past_tensor_temp = torch.cat((past_tensor, past_temp_tensor), dim=2)

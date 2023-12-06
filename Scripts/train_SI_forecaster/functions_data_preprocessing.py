@@ -165,13 +165,18 @@ def get_3d_arrays(past_ctxt, fut_ctxt, temp, input_dict):
     fut_ctxt_ext = np.zeros((n_ex, lookahead, n_cols_fut_ctxt))
     past_temp_ext = np.zeros((n_ex, lookback, n_cols_temp))
     fut_temp_ext = np.zeros((n_ex, lookahead, n_cols_temp))
+    past_ctxt_ext_2 = np.zeros((n_ex, lookback, n_cols_past_ctxt))
+    past_temp_ext_2 = np.zeros((n_ex, lookback, n_cols_temp))
+
 
     for ex in range(n_ex):
         index = ex + lookback
 
         for lb in range(lookback):
-            past_ctxt_ext[ex, lb, :] = past_ctxt[index - lb - 1, :]
-            past_temp_ext[ex, lb, :] = temp[index - lb - 1, :]
+            past_ctxt_ext[ex,lb,:] = past_ctxt[index - lookback + lb, :]
+            past_temp_ext[ex, lb, :] = temp[index - lookback +lb, :]
+
+
 
         for la in range(lookahead):
             fut_ctxt_ext[ex, la, :] = fut_ctxt[index + la, :]

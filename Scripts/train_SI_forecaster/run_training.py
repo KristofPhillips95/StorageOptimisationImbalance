@@ -23,15 +23,15 @@ if __name__ == '__main__':
         'batch_size': 64,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [5/7,1/7,1/7],
-        'lookahead': 10,
-        'lookback': 4,
+        'lookahead': 12,
+        'lookback': 8,
         'dev': 'cuda',
         'n_components_feat':2, #number of input tensors to neural network for forward pass
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
-        'n_configs': 3, #Number of HP configurations
-        'store_code': '20231130_test',
-        'epochs': 1,
+        #'n_configs': 3, #Number of HP configurations
+        'store_code': '20231206',
+        'epochs': 100,
         'patience': 20,
         'loc_scaler': "../scaling/Scaling_values.xlsx",
         "unscale_labels":True
@@ -74,9 +74,9 @@ if __name__ == '__main__':
 
     hp_dict = {
         'input_size_e': [ise], #not a hyperparameter?
-        'hidden_size_lstm': [32],
-        'layers_lstm': [1],
-        'lr': [0.001],
+        'hidden_size_lstm': [32,64],
+        'layers_lstm': [1,2],
+        'lr': [0.001,0.005,0.0005,0.0001],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         'input_size_d': [isd], #not a hyperparameter?
         #'input_size_past_t': [1 for i in range(idd['n_configs'])],  # TODO: not doing anything right now? Check

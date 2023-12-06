@@ -85,8 +85,6 @@ class LSTM_ED(torch.nn.Module):
                                     batch_first=True,bidirectional=False).to(dev)  # Decoder
         self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev) # fully connected 1
 
-
-
     def forward(self, list_data,dev_type='NA'):
         x_e = list_data[0]
         x_d = list_data[1]
@@ -234,6 +232,74 @@ class LSTM_ED_Attention(torch.nn.Module):
 
         out = torch.squeeze(self.fc(output_d))
         return out
+
+
+"""
+Transformer class, as produced by chatgpt
+"""
+
+import torch
+import torch.nn as nn
+from torch.nn import Transformer
+import math
+
+
+class TransformerModel(nn.Module):
+
+    def __init__(self, input_size, hidden_size, nhead, num_encoder_layers, num_decoder_layers, output_size,
+                 dropout=0.5):
+        super(TransformerModel, self).__init__()
+
+        self.model_type = 'Transformer'
+        self.src_mask = None
+        self.pos_encoder = PositionalEncoding(input_size, dropout)
+
+        encoder_layers = TransformerEncoderLayer(input_size, nhead, hidden_size, dropout)
+        self.transformer_encoder = TransformerEncoder(encoder_layers, num_encoder_layers)
+
+        decoder_layers = TransformerDecoderLayer(input_size, nhead, hidden_size, dropout)
+        self.transformer_decoder = TransformerDecoder(decoder_layers, num_decoder_layers)
+
+        self.encoder = nn.Linear(input_size, input_size)
+        self.decoder = nn.Linear(input_size, output_size)
+
+    def _generate_square_subsequent_mask(self, sz):
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
+        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
+        return mask
+
+    def forward(self, src, tgt):
+        if self.src_mask is None or self.src_mask.size(0) != len(src):
+            device = src.device
+            mask = self._generate_square_subsequent_mask(len(src)).to(device)
+            self.src_mask = mask
+
+        src = self.encoder(src)
+        src = self.pos_encoder(src)
+        memory = self.transformer_encoder(src, self.src_mask)
+
+        tgt = self.decoder(tgt)
+        output = self.transformer_decoder(tgt, memory, self.src_mask)
+        return output
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model, dropout=0.1, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(0, 1)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:x.size(0), :]
+        return self.dropout(x)
+
 
 """
 Bi-attention, supposedly as translated by chatgpt from the tf code of Jeremie to torch code
