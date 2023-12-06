@@ -54,9 +54,11 @@ def get_specific_df(datapoint,start,end):
         with missing data of the last past quarter hour if you request this data in the beginning of said qh
         """
         #TODO: fix such that this works regardless of the time within the qh this is requested
+        #TODO: average of SI minutely does not exactly correspond to quarter hourly SI; figure out where this comes from
         df_SI_quarter = connection.get_imbalance_prices_per_quarter_hour_own(start=start, end=end)
-        df_SI_min = connection.get_imbalance_prices_per_min()
+        df_SI_min = connection.get_current_system_imbalance()
         df = complement_SI(df_qh=df_SI_quarter, df_min=df_SI_min)
+
         df.rename(columns={'systemimbalance': datapoint},inplace=True)
 
     elif datapoint == 'load_act':
@@ -90,7 +92,7 @@ def get_specific_df(datapoint,start,end):
         df.rename(columns={'NG': datapoint},inplace=True)
 
     else:
-        sys.exit('Datapoint has not been integrated.')
+        raise ValueError(f'Unsupported datapoint {datapoint}')
 
 
 
