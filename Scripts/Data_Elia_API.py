@@ -97,6 +97,11 @@ def get_specific_df(datapoint,start,end):
         df_ARC_MO_raw = connection.get_ARC_merit_order(start=start, end=end)
         df = convert_raw_ARC(df_raw=df_ARC_MO_raw)
 
+    elif datapoint == 'SI_and_price':
+        df = connection.get_imbalance_prices_per_quarter_hour_own(start=start, end=end)
+        df.reset_index(inplace=True)
+
+
     else:
         raise ValueError(f'Unsupported datapoint {datapoint}')
 

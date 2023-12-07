@@ -40,6 +40,29 @@ def get_dataframe(list_data,steps,timeframe):
 
     return df
 
+def get_most_recent(lookback=10):
+
+    def get_most_recent(df,target):
+        dict_target = {
+            'SI': 'systemimbalance',
+            'imbPrice': 'positiveimbalanceprice'
+        }
+        df_sorted = df.sort_values(by='datetime',ascending=False)
+        df_filtered = df_sorted[df_sorted['systemimbalance'].apply(lambda x: isinstance(x, float))]
+
+        latestval = df_filtered[dict_target[target]].iloc[0]
+        latest_dt = df_filtered['datetime'].iloc[0]
+
+        return (latestval,latest_dt)
+
+    start,end = determine_start_end(lookback,'past')
+    df = dea.get_dataframes(list_data=['SI_and_price'],start=start,end=end)
+
+    tuple_SI = get_most_recent(df,'SI')
+    tuple_imbPrice = get_most_recent(df,'imbPrice')
+
+    return tuple_SI, tuple_imbPrice
+
 def convert_df_tensor(df):
     #TODO: check why model to 'cpu' iso data to 'cuda' doesn't work
 
@@ -89,8 +112,7 @@ def pred_SI(lookahead,lookback,dev='cpu'):
 
     Returns:
         - SI_FC: 2d numpy array with SI forecast. Lookahead instances are along dim 0, pre-determined quantiles along dim 1
-        - last_si_value: single value of latest SI. #TODO: currently, this is the imperfect approximation of the SI at the running qh. Adjust this flow of data(?)
-        - last_si_time: datetime object of quarter hour of last known SI
+        - curr_qh: datetime object of quarter hour that marks last qh considered as 'past'
         - quantiles: Pre-determined quantiles of SI forecast
     """
 
@@ -120,8 +142,7 @@ def pred_SI(lookahead,lookback,dev='cpu'):
     tic = time.time()
     df_past = get_dataframe(list_data=dict_pred['data_past'], steps=dict_pred['lookback'], timeframe='past')
     latest_index = df_past['datetime'].idxmax()
-    last_si_value = df_past.at[latest_index,'SI']
-    last_si_time = df_past.at[latest_index, 'datetime']
+    curr_qh = df_past.at[latest_index, 'datetime']
 
     df_past_scaled = scaling.scale_data(df_past.drop(['datetime'], axis=1))
     df_fut = get_dataframe(list_data=dict_pred['data_fut'], steps=dict_pred['lookahead'], timeframe='fut')
@@ -141,7 +162,7 @@ def pred_SI(lookahead,lookback,dev='cpu'):
 
     SI_FC = si_forecaster([past_tensor_temp, fut_tensor_temp]).detach().numpy()
 
-    return SI_FC, (last_si_value,last_si_time), quantiles
+    return SI_FC, curr_qh, quantiles
 
 def fetch_MO(lookahead,lookback):
 
@@ -340,34 +361,44 @@ def call_prediction():
             Quantile forecasts of the system imbalance
             LA: lookahead of prediction
             n_quant: number of quantiles included in probabilistic forecast
-        -last_si_value: float
-            Value of latest SI. #TODO: currently, this is the imperfect approximation of the SI at the running qh. Adjust this flow of data(?)
-        -last_si_time: datetime
-            quarter hour of last known SI
+
         -avg_price_fc: (LA) np array type float
             weighted average of price forecast per lookahead instance
         -quantile_price_fc: (LA x n_quant) np array type float
             imbalance price forecast corresponding one-on-one with the SI forecasts given as input
         -quantiles: list type float
             The quantiles (values in interval (0,1), ascending order) which are predicted
+        -curr_qh: datetime
+            Lastest quarter hour considered as 'past' information
+        -last_si_value: float
+            Value of latest known full qh SI.
+        -last_si_time: datetime
+            quarter hour of latest known SI
+        -last_imbPrice_value: float
+            Value of latest known full qh imbalance price.
+        -last_imbPrice_dt: datetime
+            quarter hour of latest known imbalance price
     """
 
     dev = 'cpu'
     la = 12
     lb = 8
 
+
+    (last_si_value,last_si_dt),(last_imbPrice_value,last_imbPrice_dt) = get_most_recent()
+
     MO_past,MO_fut = fetch_MO(lookahead=la,lookback=lb)
 
-    si_quantile_fc, (last_si_value, last_si_time), quantiles = pred_SI(lookahead=la,lookback=lb,dev=dev)
+    si_quantile_fc, curr_qh, quantiles = pred_SI(lookahead=la,lookback=lb,dev=dev)
 
     avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
 
-    return si_quantile_fc, (last_si_value,last_si_time), avg_price_fc, quantile_price_fc, quantiles
+    return si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_dt), (last_imbPrice_value,last_imbPrice_dt)
 
 
 if __name__ == '__main__':
 
-    si_quantile_fc, (last_si_value,last_si_time), avg_price_fc, quantile_price_fc, quantiles = call_prediction()
+    si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_time), (last_imbPrice_value,last_imbPrice_dt) = call_prediction()
 
     x=1
 
