@@ -93,6 +93,10 @@ def get_specific_df(datapoint,start,end):
         df = aggregate_conventional(df_raw=df_DA_FT, list_gen_types=['NG'])
         df.rename(columns={'NG': datapoint},inplace=True)
 
+    elif datapoint == 'MO':
+        df_ARC_MO_raw = connection.get_ARC_merit_order(start=start, end=end)
+        df = convert_raw_ARC(df_raw=df_ARC_MO_raw)
+
     else:
         raise ValueError(f'Unsupported datapoint {datapoint}')
 

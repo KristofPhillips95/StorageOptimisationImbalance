@@ -211,6 +211,19 @@ class EliaPandasClient:
     ###########################
     ##OWN METHODS BELOW
     ###############################
+
+    def get_MO(self,
+        start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
+        end: dt.datetime | dt.date | pd.Timestamp = TODAY,
+        **params) -> pd.DataFrame:
+        """Returns the current imbalance prices"""
+        dataset = "ods083"
+        where_filter = self._construct_where_filter(**locals())
+        params.update({"where": where_filter})
+        df = self._execute_query(dataset, params)
+        df = self._process_results(df)
+        return df
+
     def get_DA_schedule_by_fuel(self,
         start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
         end: dt.datetime | dt.date | pd.Timestamp = TODAY,
