@@ -20,7 +20,7 @@ if __name__ == '__main__':
         'target_col': 'SI', #Before: "Frame_SI_norm"
         'datetime_from': datetime(2019,9,1,0,0,0),
         'datetime_to': datetime(2023,9,1,0,0,0),
-        'batch_size': 64,
+        'batch_size': 16,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [5/7,1/7,1/7],
         'lookahead': 12,
@@ -30,9 +30,9 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         #'n_configs': 3, #Number of HP configurations
-        'store_code': '20231206',
+        'store_code': '20231206_2',
         'epochs': 100,
-        'patience': 20,
+        'patience': 10,
         'loc_scaler': "../scaling/Scaling_values.xlsx",
         "unscale_labels":True
     }

@@ -92,10 +92,11 @@ def pred_SI(dev='cpu'):
         - quantiles: Pre-determined quantiles of SI forecast
     """
 
-    la = 10
-    loc_fc = "20231126"
+    la = 12
+    lb = 8
+    loc_fc = "20231206_2"
+    config = 6
     dir = f'train_SI_forecaster/output/models_production/LA_{la}/{loc_fc}/'
-    config = 1
     path_data = f"{dir}data_dict.pkl"
     loc_scaling = "scaling/Scaling_values.xlsx"
 
@@ -103,12 +104,12 @@ def pred_SI(dev='cpu'):
         dict_datapoints = pickle.load(file)
 
     dict_pred = {
-        'lookahead': 10,
-        'lookback': 4,
+        'lookahead': la,
+        'lookback': lb,
         'data_past': dict_datapoints['read_cols_past_ctxt'],
         'data_fut': dict_datapoints['read_cols_fut_ctxt'],
         'cols_temp': dict_datapoints['cols_temp'],
-        'loc_SI_FC': 'train_SI_forecaster/output/models_production/LA_10/20231126/config_9.pt',
+        'loc_SI_FC': f'{dir}/config_{config}.pt',
         'loc_price_FC': ''
     }
 
