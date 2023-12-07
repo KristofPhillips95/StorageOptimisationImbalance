@@ -9,11 +9,12 @@ import time
 import os
 import pickle
 import copy
+import math
 sys.path.insert(0,"train_SI_forecaster")
 sys.path.insert(0,"scaling")
-import functions_data_preprocessing as fdp
 import scaling
-import math
+import functions_data_preprocessing as fdp
+
 
 
 
@@ -194,6 +195,63 @@ def get_loc_SI_MO(si):
 
     return pos
 
+def convert_quantiles_probabilities(quantiles):
+    """
+    Assign probability to specific quantiles
+    Assumption:
+        -Probability of one quantile is found by finding the middle between its neighbouring quantiles, and calculating the width of these 'endpoints'
+    #TODO: Do this more rigourously?
+    """
+
+    def get_endpoints(quantiles):
+        endpoints = []
+        ep_l = 0
+
+        for (i,q) in enumerate(quantiles):
+            if i >0:
+                ep_l = ep_h
+            if i == len(quantiles)-1:
+                ep_h = 1
+            else:
+                ep_h = (quantiles[i+1]+q)/2
+            endpoints.append((ep_l,ep_h))
+
+        return endpoints
+
+
+    probs = []
+    endpoints = get_endpoints(quantiles)
+    for (ep_l,ep_h) in endpoints:
+        probs.append(ep_h-ep_l)
+
+    return probs
+
+def calc_avg_price(price_quantiles,probs):
+    """
+    Convert set of quantile forecasts and probabilities associated to those quantiles to average price forecast
+
+    """
+    la = price_quantiles.shape[0]
+    n_quantiles = price_quantiles.shape[1]
+
+    assert n_quantiles==len(probs), f"Number of probabilities is {len(probs)}, whereas the price forecast contains {n_quantiles} fields."
+
+    avg_price_fc = np.zeros(la)
+
+    for i in range(la):
+        avg_price_fc[i] = np.sum(np.multiply(probs,price_quantiles[i,:]))
+
+    return avg_price_fc
+
+def get_price_fc(SI_FC,MO,quantiles):
+
+    probs = convert_quantiles_probabilities(quantiles)
+
+    price_fc_quantiles = price_from_SI(SI_FC,MO)
+
+    avg_price_fc = calc_avg_price(price_quantiles=price_fc_quantiles,probs=probs)
+
+    return avg_price_fc,price_fc_quantiles
 
 
 
@@ -207,22 +265,11 @@ if __name__ == '__main__':
     la = 12
     lb = 8
 
-    quantiles = [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99]
-
-    si_fc = (np.random.rand(la,len(quantiles))-0.5)*1000
-    # Get the indices that would sort each row
-    sorted_indices = np.argsort(si_fc, axis=1)
-    # Create a new array with sorted values
-    si_fc = np.take_along_axis(si_fc, sorted_indices, axis=1)
-
     MO_past,MO_fut = fetch_MO(lookahead=la,lookback=lb)
 
-    price_fc_quantiles = price_from_SI(SI_FC=si_fc,MO=MO_fut)
+    fc, (last_si_value, last_si_time), quantiles = pred_SI(lookahead=la,lookback=lb,dev=dev)
 
-
-
-    fc = pred_SI(lookahead=la,lookback=lb,dev=dev)
-
+    avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=fc,MO=MO_fut,quantiles=quantiles)
 
     x=1
 
