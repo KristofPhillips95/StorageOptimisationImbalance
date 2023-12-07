@@ -14,10 +14,6 @@ sys.path.insert(0,"train_SI_forecaster")
 sys.path.insert(0,"scaling")
 import scaling
 import functions_data_preprocessing as fdp
-
-
-
-
 sys.path.append(f"{os.path.dirname(__file__)}/train_SI_forecaster") #Need to do this for loading pytorch models
 from train_SI_forecaster import torch_classes
 
@@ -34,7 +30,6 @@ def determine_start_end(steps, timeframe):
     else:
         raise ValueError(f'Unsupported timeframe {timeframe}')
     return start, end
-
 
 def get_dataframe(list_data,steps,timeframe):
     #TODO: check if outcoming data correct
@@ -85,12 +80,17 @@ def pred_SI(lookahead,lookback,dev='cpu'):
     Function returning the RT forecast of the SI
 
     Parameters:
+        -lookahead: int
+            amount of instances of prediction
+        -lookback: int
+            amount of instances of past observations used in prediction
         - dev: str, optional
             device to which the forecasting model should be loaded: 'cpu' or 'cuda'
 
     Returns:
         - SI_FC: 2d numpy array with SI forecast. Lookahead instances are along dim 0, pre-determined quantiles along dim 1
         - last_si_value: single value of latest SI. #TODO: currently, this is the imperfect approximation of the SI at the running qh. Adjust this flow of data(?)
+        - last_si_time: datetime object of quarter hour of last known SI
         - quantiles: Pre-determined quantiles of SI forecast
     """
 
@@ -143,8 +143,11 @@ def pred_SI(lookahead,lookback,dev='cpu'):
 
     return SI_FC, (last_si_value,last_si_time), quantiles
 
-
 def fetch_MO(lookahead,lookback):
+
+    """
+    Returns past and future ARC MO based on amount of lookahead and lookback instances as numpy arrays
+    """
 
     df_past = get_dataframe(list_data=['MO'], steps=lookback, timeframe='past')
     df_fut = get_dataframe(list_data=['MO'], steps=lookahead, timeframe='fut')
@@ -156,6 +159,24 @@ def fetch_MO(lookahead,lookback):
     return MO_past,MO_fut
 
 def price_from_SI(SI_FC,MO):
+
+    """
+    Returns quantile forecasts of the imbalance price by combining quantile forecasts of SI with the ARC merit order
+
+    Parameters:
+        -SI_FC: (LAxn_quant) np array type float
+            Quantile forecasts of the system imbalance
+            LA: lookahead of prediction
+            n_quant: number of quantiles included in probabilistic forecast
+        -MO: (LA x MO_size) np array type float
+            Merit order containing the activation price per volume level
+            LA: lookahead of prediction
+            MO_size: size of the merit order, including both upward and downward volume levels
+
+    Returns:
+        -price_fc: (LA x n_quant) np array type float
+            imbalance price forecast corresponding one-on-one with the SI forecasts given as input
+    """
 
     price_fc = np.zeros_like(SI_FC)
 
@@ -174,6 +195,14 @@ def get_loc_SI_MO(si):
     Function that converts single value of SI to corresponding location in merit order
     Assumes that the merit order consists of price for following volume levels: [-1000MW,-900MW,...,-100MW,100MW,200MW,...,1000MW]
     The SI is first truncated to fall within the range of that merit order
+
+    Parameters:
+        -si: float
+            value of system imbalance
+
+    Returns:
+        -pos: int
+            location along 1d merit order (assuming the above volume levels) corresponding to the specific si value
     """
 
     def truncate_si(x):
@@ -201,9 +230,28 @@ def convert_quantiles_probabilities(quantiles):
     Assumption:
         -Probability of one quantile is found by finding the middle between its neighbouring quantiles, and calculating the width of these 'endpoints'
     #TODO: Do this more rigourously?
+
+    Parameters:
+        -quantiles: list type float
+            The quantiles (values in interval (0,1), ascending order) which are predicted
+
+    Returns:
+        -probs: list type float
+            Probabilities associated with specified quantiles
     """
 
     def get_endpoints(quantiles):
+        """
+        Determines probability interval covered by the different quantiles by considering the "midpoints" between the different quantiles
+
+        Parameters:
+            -quantiles: list type float
+                The quantiles (values in interval (0,1), ascending order) which are predicted
+
+        Returns:
+            -endpoints: list of tuples type float
+                Values in interval [0,1] that are assumed to be covered by the specified quantiles
+        """
         endpoints = []
         ep_l = 0
 
@@ -218,7 +266,6 @@ def convert_quantiles_probabilities(quantiles):
 
         return endpoints
 
-
     probs = []
     endpoints = get_endpoints(quantiles)
     for (ep_l,ep_h) in endpoints:
@@ -228,8 +275,17 @@ def convert_quantiles_probabilities(quantiles):
 
 def calc_avg_price(price_quantiles,probs):
     """
-    Convert set of quantile forecasts and probabilities associated to those quantiles to average price forecast
+    Calculates weighted average of price quantile forecasts given probabilities of specified quantiles
 
+    Parameters:
+        -price_quantiles: (LA x n_quant) np array type float
+            Quantile forecasts of the imbalance price
+            LA: lookahead of prediction
+            n_quant: number of quantiles included in probabilistic forecast
+
+    Returns:
+        -avg_price_fc: (LA) np array type float
+            weighted average of price forecast per lookahead instance
     """
     la = price_quantiles.shape[0]
     n_quantiles = price_quantiles.shape[1]
@@ -244,6 +300,27 @@ def calc_avg_price(price_quantiles,probs):
     return avg_price_fc
 
 def get_price_fc(SI_FC,MO,quantiles):
+    """
+    Returns average and quantile price forecast given quantile forecasts of the SI, ARC merit order and the quantile values which were forecasted
+
+    Parameters:
+        -SI_FC: (LAxn_quant) np array type float
+            Quantile forecasts of the system imbalance
+            LA: lookahead of prediction
+            n_quant: number of quantiles included in probabilistic forecast
+        -MO: (LA x MO_size) np array type float
+            Merit order containing the activation price per volume level
+            LA: lookahead of prediction
+            MO_size: size of the merit order, including both upward and downward volume levels
+        -quantiles: list type float
+            The quantiles (values in interval (0,1), ascending order) which are predicted
+
+    Returns:
+        -avg_price_fc: (LA) np array type float
+            weighted average of price forecast per lookahead instance
+        -price_fc_quantiles: (LA x n_quant) np array type float
+            imbalance price quantile forecast corresponding one-on-one with the SI quantile forecasts given as input
+    """
 
     probs = convert_quantiles_probabilities(quantiles)
 
@@ -253,13 +330,27 @@ def get_price_fc(SI_FC,MO,quantiles):
 
     return avg_price_fc,price_fc_quantiles
 
+def call_prediction():
 
+    """
+    Function returning the RT forecast of the SI and imbalance price
 
-
-
-
-
-if __name__ == '__main__':
+    Returns:
+        -fc: (LA x n_quant) np array type float
+            Quantile forecasts of the system imbalance
+            LA: lookahead of prediction
+            n_quant: number of quantiles included in probabilistic forecast
+        -last_si_value: float
+            Value of latest SI. #TODO: currently, this is the imperfect approximation of the SI at the running qh. Adjust this flow of data(?)
+        -last_si_time: datetime
+            quarter hour of last known SI
+        -avg_price_fc: (LA) np array type float
+            weighted average of price forecast per lookahead instance
+        -quantile_price_fc: (LA x n_quant) np array type float
+            imbalance price forecast corresponding one-on-one with the SI forecasts given as input
+        -quantiles: list type float
+            The quantiles (values in interval (0,1), ascending order) which are predicted
+    """
 
     dev = 'cpu'
     la = 12
@@ -267,13 +358,18 @@ if __name__ == '__main__':
 
     MO_past,MO_fut = fetch_MO(lookahead=la,lookback=lb)
 
-    fc, (last_si_value, last_si_time), quantiles = pred_SI(lookahead=la,lookback=lb,dev=dev)
+    si_quantile_fc, (last_si_value, last_si_time), quantiles = pred_SI(lookahead=la,lookback=lb,dev=dev)
 
-    avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=fc,MO=MO_fut,quantiles=quantiles)
+    avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
+
+    return si_quantile_fc, (last_si_value,last_si_time), avg_price_fc, quantile_price_fc, quantiles
+
+
+if __name__ == '__main__':
+
+    si_quantile_fc, (last_si_value,last_si_time), avg_price_fc, quantile_price_fc, quantiles = call_prediction()
 
     x=1
-
-    #SI_FC = si_forecaster([past_tensor,fut_tensor]).detach().numpy()
 
 
 
