@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import torch
 import datetime as dt
+from datetime import datetime,timedelta
 import pytz
 import sys
 import Data_Elia_API as dea
@@ -170,12 +171,21 @@ def fetch_MO(lookahead,lookback):
     Returns past and future ARC MO based on amount of lookahead and lookback instances as numpy arrays
     """
 
-    df_past = get_dataframe(list_data=['MO'], steps=lookback, timeframe='past')
-    #TODO: this prolly gives issues too when the day just started, and cannot be solved the same way as for the 'fut' case --> I think we should store these values to re-use them
+    brussels_timezone = pytz.timezone('Europe/Brussels')
 
-    df_fut = get_dataframe(list_data=['MO'], steps=lookahead, timeframe='fut')
-    if True: #TODO add proper condition to invoke fetching the merit order via individual bids
-        df_fut_2 = get_dataframe(list_data=['MO_bids'], steps=lookahead, timeframe='fut')
+    # Get the current time in the Brussels time zone
+    current_time = datetime.now(brussels_timezone)
+
+    time_end_la = current_time + timedelta(minutes=lookahead * 15)
+
+    df_past = get_dataframe(list_data=['MO'], steps=lookback, timeframe='past')
+    #TODO: this prolly will give issues too when we use this as features for price forecasting, and cannot be solved the same way as for the 'fut' case --> I think we should store these values to re-use them
+
+    if current_time.date() == time_end_la.date():
+        df_fut = get_dataframe(list_data=['MO'], steps=lookahead, timeframe='fut')
+    else:
+        df_fut = get_dataframe(list_data=['MO_bids'], steps=lookahead, timeframe='fut')
+        #TODO: test if this implementation works when the bids are extended to the next day but the volume levels aren't
 
     MO_past = df_past.drop('datetime',axis=1).to_numpy()
     MO_fut = df_fut.drop('datetime',axis=1).to_numpy()
