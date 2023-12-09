@@ -3,31 +3,49 @@ import json
 import datetime
 import predict_imb_price
 
-SI_FC, last_si, quantiles = predict_imb_price.pred_SI(dev='cpu')
+#Establish ID of object to be pushed to DB
+id = 1
 
-id = 10
+#API link to push to DB
 api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
 
-prices_fc_spread = dict()
+#Initial soc
+soc_0 = 2
 
-prices_fc_spread = dict()
-last_si_time = last_si[1]
-fc_times = [(last_si_time + datetime.timedelta(minutes=15 * fc_step)).strftime("%H:%M:%S") for fc_step in range(SI_FC.shape[0])]
-writing_time = datetime.datetime.now().strftime('%H:%M:%S')
+#Obtain relevant values from the forecaster
+si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh,\
+(last_si_value,last_si_time), (last_imbPrice_value,last_imbPrice_dt), (c,d,soc)\
+    = predict_imb_price.call_prediction(soc_0)
+
+#Establish a list of future times for which the forecasts are made
+fc_times = [(last_si_time + datetime.timedelta(minutes=15 * (fc_step+1))).strftime("%d %H:%M:%S") for fc_step in
+                range(si_quantile_fc.shape[0])]
+
+#Convert the 2d imbalance forecast array to a dictionary with timesteps as keys
+si_quantile_fc_dict = dict()
 for i, fc_time in enumerate(fc_times):
-    prices_fc_spread[fc_time] = [str(SI_FC[i,q]) for q in range(SI_FC.shape[1]) ]
+    si_quantile_fc_dict[fc_time] = [str(si_quantile_fc[i, q]) for q in range(si_quantile_fc.shape[1])]
 
+quantile_price_fc_dict = dict()
+for i, fc_time in enumerate(fc_times):
+    quantile_price_fc_dict[fc_time] = [str(quantile_price_fc[i, q]) for q in range(quantile_price_fc.shape[1])]
 
+writing_time = datetime.datetime.now()
 data = {
     "id": id,
-    "time": last_si_time.strftime('%H:%M:%S'),
-    "imba_price": last_si[0],
-    "imba_price_fc": 1,
-    "charge": 1,
-    "soc": 1,
-    "fc_spread": prices_fc_spread,
+    "curr_qh":curr_qh.strftime('%d %H:%M:%S'),
+    "last_imbPrice_value": last_imbPrice_value,
+    "last_imbPrice_dt": last_imbPrice_dt.strftime('%d %H:%M:%S'),
+    "last_si_value": last_si_value,
+    "last_si_time":last_si_time.strftime('%d %H:%M:%S'),
+    "charge": c.tolist(),
+    "discharge":d.tolist(),
+    "soc": soc.tolist(),
     "quantiles": quantiles,
-    "writing_time": writing_time
+    "si_quantile_fc": si_quantile_fc_dict,
+    "avg_price_fc": avg_price_fc.tolist(),
+    "quantile_price_fc":quantile_price_fc_dict,
+    "writing_time": writing_time.strftime('%d %H:%M:%S')
 }
 
 # data = {
