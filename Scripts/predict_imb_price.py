@@ -365,7 +365,63 @@ def get_price_fc(SI_FC,MO,quantiles):
 
     return avg_price_fc,price_fc_quantiles
 
-def call_prediction():
+def optimize_schedule(soc_0,avg_price_forecast):
+
+    """
+    Returns optimized schedule based on average price forecast
+    CURRENT IMPLEMENTATION: RANDOM SCHEDULE GENERATOR
+
+    Parameters:
+        -soc_0: float
+            State of charge at start of optimization
+        -avg_price_forecast: (LA) np array type float
+            Average price forecast over lookahead horizon
+            LA: lookahead of prediction
+    Returns:
+        -c: (LA) np array type float, positive values
+            vector of charge decisions
+        -d: (LA) np array type float, positive values
+            vector of discharge decisions
+        -soc: (LA+1) np array type float
+            vector of optimized state of charge evolution, soc[0] = soc_0
+    """
+
+    lookahead = avg_price_forecast.shape[0]
+    c = np.zeros_like(avg_price_forecast)
+    d = np.zeros_like(avg_price_forecast)
+    soc = np.zeros(lookahead+1)
+    soc[0] = soc_0
+
+    rands = np.random.uniform(-1,1,size=(lookahead))
+
+    soc_max = 4
+    soc_min = 0
+
+    for la in range(lookahead):
+
+        if rands[la] > 0:
+            if soc[la] - rands[la] < soc_min:
+                d[la] = soc[la]-soc_min
+            else:
+                d[la] = rands[la]
+        else:
+            if soc[la] - rands[la] > soc_max:
+                c[la] = soc_max - soc[la]
+            else:
+                c[la] = -rands[la]
+
+        soc[la+1] = soc[la] + c[la] - d[la]
+
+    return c,d,soc
+
+
+
+
+
+
+
+
+def call_prediction(soc_0):
 
     """
     Function returning the RT forecast of the SI and imbalance price
@@ -392,6 +448,12 @@ def call_prediction():
             Value of latest known full qh imbalance price.
         -last_imbPrice_dt: datetime
             quarter hour of latest known imbalance price
+        -c: (LA) np array type float, positive values
+            vector of charge decisions
+        -d: (LA) np array type float, positive values
+            vector of discharge decisions
+        -soc: (LA+1) np array type float
+            vector of optimized state of charge evolution, soc[0] = soc_0
     """
 
     dev = 'cpu'
@@ -407,12 +469,16 @@ def call_prediction():
 
     avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
 
-    return si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_dt), (last_imbPrice_value,last_imbPrice_dt)
+    c,d,soc = optimize_schedule(soc_0=soc_0,avg_price_forecast=avg_price_fc)
+
+    return si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_dt), (last_imbPrice_value,last_imbPrice_dt), (c,d,soc)
 
 
 if __name__ == '__main__':
 
-    si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_time), (last_imbPrice_value,last_imbPrice_dt) = call_prediction()
+    soc_0 = 2
+
+    si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_time), (last_imbPrice_value,last_imbPrice_dt), (c,d,soc) = call_prediction(soc_0)
 
     x=1
 
