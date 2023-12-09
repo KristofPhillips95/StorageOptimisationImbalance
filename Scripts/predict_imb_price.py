@@ -392,23 +392,25 @@ def optimize_schedule(soc_0,avg_price_forecast):
     soc = np.zeros(lookahead+1)
     soc[0] = soc_0
 
-    rands = np.random.uniform(-1,1,size=(lookahead))
+    #rands = np.random.uniform(-1,1,size=(lookahead))
+    avg_forecast = np.mean(avg_price_forecast)
 
     soc_max = 4
     soc_min = 0
+    max_charge = 1
 
     for la in range(lookahead):
 
-        if rands[la] > 0:
-            if soc[la] - rands[la] < soc_min:
+        if avg_price_forecast[la] > avg_forecast:
+            if soc[la] - max_charge < soc_min:
                 d[la] = soc[la]-soc_min
             else:
-                d[la] = rands[la]
+                d[la] = max_charge
         else:
-            if soc[la] - rands[la] > soc_max:
+            if soc[la] +max_charge > soc_max:
                 c[la] = soc_max - soc[la]
             else:
-                c[la] = -rands[la]
+                c[la] = max_charge
 
         soc[la+1] = soc[la] + c[la] - d[la]
 
