@@ -171,7 +171,11 @@ def fetch_MO(lookahead,lookback):
     """
 
     df_past = get_dataframe(list_data=['MO'], steps=lookback, timeframe='past')
+    #TODO: this prolly gives issues too when the day just started, and cannot be solved the same way as for the 'fut' case --> I think we should store these values to re-use them
+
     df_fut = get_dataframe(list_data=['MO'], steps=lookahead, timeframe='fut')
+    if True: #TODO add proper condition to invoke fetching the merit order via individual bids
+        df_fut_2 = get_dataframe(list_data=['MO_bids'], steps=lookahead, timeframe='fut')
 
     MO_past = df_past.drop('datetime',axis=1).to_numpy()
     MO_fut = df_fut.drop('datetime',axis=1).to_numpy()

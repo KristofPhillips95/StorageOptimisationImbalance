@@ -97,6 +97,19 @@ def get_specific_df(datapoint,start,end):
         df_ARC_MO_raw = connection.get_ARC_merit_order(start=start, end=end)
         df = convert_raw_ARC(df_raw=df_ARC_MO_raw)
 
+    elif datapoint == 'MO_bids':
+        #df_ARC_MO_raw = connection.get_ARC_merit_order(start=start, end=end)
+        #df_MO = convert_raw_ARC(df_raw=df_ARC_MO_raw)
+        df_bids_incremental = connection.get_incremental_bids(start=start,end=end)
+        df_bids_decremental = connection.get_decremental_bids(start=start,end=end)
+
+        df_decremental = convert_raw_bids(df_raw=df_bids_decremental,direction=-1)
+        df_incremental = convert_raw_bids(df_raw=df_bids_incremental,direction=1)
+
+        df = merge_decremental_incremental_df(df_decremental,df_incremental)
+
+        return df
+
     elif datapoint == 'SI_and_price':
         df = connection.get_imbalance_prices_per_quarter_hour_own(start=start, end=end)
         df.reset_index(inplace=True)
@@ -160,7 +173,6 @@ def convert_raw_ARC(df_raw):
 
         return val_list
 
-
     #Define columns of return dataframe as datetime, and 1 column per volume level
     columns = ['datetime'] + [str(-1000+i*100) for i in range(21)]
     columns.remove('0')
@@ -190,6 +202,103 @@ def convert_raw_ARC(df_raw):
         df.loc[i] = val_list
 
     return df
+
+def convert_raw_bids(df_raw,direction):
+
+    def get_price_first_x_r2(sorted_df_r2,x):
+
+        tot_vol = 0
+
+        prices = []
+        volumes = []
+
+        for index,row in sorted_df_r2.iterrows():
+            vol = row['energybidvolume']
+            price = row['energybidmarginalprice']
+
+            if sum(volumes)+vol<x:
+                volumes.append(vol)
+                prices.append(price)
+            elif sum(volumes)+vol >= x:
+                volumes.append(x-sum(volumes))
+                prices.append(price)
+                break
+
+        weighted_price = sum([volumes[i]*prices[i] for i in range(len(volumes))])/x
+
+
+        return weighted_price
+
+    def get_marginal_bid_r3(sorted_df_r3,target):
+
+        tot_volume = 0
+
+        for index,row in sorted_df_r3.iterrows():
+            tot_volume += row['energybidvolume']
+            if tot_volume >= target:
+                return row['energybidmarginalprice']
+
+
+        return 1
+
+    def add_row(df,tuple_ts,df_filtered):
+
+        vals_row = [tuple_ts[1]]
+
+        df_r2 = df_filtered[df_filtered['balancingproduct']=='R2']
+        df_r3 = df_filtered[df_filtered['balancingproduct']!='R2']
+
+        if direction == -1:
+            sorted_df_r2 = df_r2.sort_values(by='energybidmarginalprice',ascending=False)
+            sorted_df_r3 = df_r3.sort_values(by='energybidmarginalprice',ascending=False)
+        elif direction == 1:
+            sorted_df_r2 = df_r2.sort_values(by='energybidmarginalprice')
+            sorted_df_r3 = df_r3.sort_values(by='energybidmarginalprice')
+
+        tot_vol_r2 = df_r2['energybidvolume'].sum()
+        price_r2 = (df_r2['energybidmarginalprice'] * df_r2['energybidvolume']).sum() / tot_vol_r2 #+ 11.67
+
+        i=1
+        while 100*i < tot_vol_r2:
+            price = get_price_first_x_r2(sorted_df_r2,100*i)
+            vals_row += [price]
+            i+=1
+
+        while len(vals_row) < 11:
+            next_bid = len(vals_row)*100
+            target = next_bid-tot_vol_r2
+            price = get_marginal_bid_r3(sorted_df_r3,target)
+
+            if direction * price > direction * price_r2:
+                vals_row += [price]
+            else:
+                vals_row += [price_r2]
+
+        df.loc[tuple_ts[0]] = vals_row
+
+        return df
+
+
+    columns = ['datetime'] + [str((i+1)*(direction * 100)) for i in range(10)]
+    df = pd.DataFrame(columns=columns)
+
+    #Retrieve list of timestamps and set them as a separate column in raw df
+    timestamps = df_raw.index.unique()
+    df_raw.reset_index(inplace=True)
+
+    for (i,ts) in enumerate(timestamps):
+        df_filtered = df_raw[df_raw['datetime']==ts]
+        df = add_row(df,(i,ts),df_filtered)
+
+    return df
+
+def merge_decremental_incremental_df(df_decremental, df_incremental):
+    merged_df = pd.merge(df_decremental, df_incremental, on='datetime', how='inner')
+    columns = ['datetime'] + [str(-1000 + i * 100) for i in range(21)]
+    columns.remove('0')
+    merged_ordered_df = merged_df[columns]
+
+    return merged_ordered_df
 
 def aggregate_renewables(df_raw,res_type,datapoint):
     """
