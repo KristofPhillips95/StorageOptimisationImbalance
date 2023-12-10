@@ -5,10 +5,27 @@ export function prepareChargeChartData(data){
     if (!data) return { labels: [], datasets: [] };
     
     const sortedData = data.slice().sort((a, b) => a.id - b.id);
-  
-    const labels = sortedData.map(item => item.time);
-    const values_3 = sortedData.map(item => item.charge);
-    const values_4 = sortedData.map(item => item.soc);
+    const last_Data_value = sortedData[sortedData.length - 1];
+
+    let future_times = Object.keys(last_Data_value.si_quantile_fc);
+    future_times = future_times.sort((a, b) => a.localeCompare(b));
+    const past_times_known = sortedData.map(item => item.last_si_time);
+    const past_times_unknown = last_Data_value.unkown_times
+
+    const charge_fc = last_Data_value.charge;
+    const soc_fc = last_Data_value.soc;
+    const discharge_fc = last_Data_value.discharge;
+
+    const nb_ts_before_fc = past_times_known.length+past_times_unknown.length
+    const knownElements = sortedData.slice(-nb_ts_before_fc);
+    const charge_known = knownElements.map(element => element.charge[0]);
+    const discharge_known = knownElements.map(element => element.discharge[0]);
+    const soc_known = knownElements.map(element => element.soc[0]);
+
+
+
+    const labels = [...past_times_known,...past_times_unknown,...future_times]
+
 
 
     return {
@@ -16,14 +33,21 @@ export function prepareChargeChartData(data){
       datasets: [
         {
           label: 'Charge',
-          data: values_3,
+          data: [...charge_known,...charge_fc],
           fill: false,
           borderColor: 'rgb(192, 75, 192)',
           tension: 0.1
         },
         {
+          label: 'Discharge',
+          data: [...discharge_known,...discharge_fc],
+          fill: false,
+          borderColor: 'rgb(192, 75, 0)',
+          tension: 0.1
+        },
+        {
           label: 'State of charge',
-          data: values_4,
+          data: [...soc_fc,...soc_fc],
           fill: false,
           borderColor: 'rgb(0, 75, 192)',
           tension: 0.1
