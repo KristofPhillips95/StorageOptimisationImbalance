@@ -469,7 +469,7 @@ def call_prediction(soc_0):
 
     si_quantile_fc, curr_qh, quantiles = pred_SI(lookahead=la,lookback=lb,dev=dev)
 
-    avg_price_fc,quantile_price_fc = -get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
+    avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
 
     c,d,soc = optimize_schedule(soc_0=soc_0,avg_price_forecast=avg_price_fc)
 
