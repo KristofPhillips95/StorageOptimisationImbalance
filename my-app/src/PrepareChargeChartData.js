@@ -1,4 +1,4 @@
-import { Line } from 'react-chartjs-2';
+import { Line,Bar } from 'react-chartjs-2';
 import {Chart} from 'chart.js/auto';
 
 export function prepareChargeChartData(data){
@@ -44,7 +44,7 @@ export function prepareChargeChartData(data){
           barThickness: 'flex', // Set to 'flex' to occupy the full available space
         },
         {
-          label: 'State of charge (Known)',
+          label: 'SOC (Known)',
           data: [...soc_known, ...Array(nb_ts_before_fc - soc_known.length).fill(null)],
           fill: false,
           borderColor: 'rgb(0, 75, 192)',
@@ -52,7 +52,7 @@ export function prepareChargeChartData(data){
           yAxisID: 'y-ax-soc', // Assign to the right y-axis
         },
         {
-          label: 'State of charge (Forecast)',
+          label: 'SOC (Forecast)',
           data: [...Array(nb_ts_before_fc - 1).fill(null), ...soc_fc],
           fill: false,
           borderColor: 'rgb(0, 75, 192)',
@@ -60,50 +60,41 @@ export function prepareChargeChartData(data){
           borderDash: [5, 5],
           yAxisID: 'y-ax-soc', // Assign to the right y-axis
         }
-      ],
-      options: {
-        scales: {
-          yAxes: [
-            {
-              id: 'y-ax-cd',
-              type: 'linear',
-              position: 'left',
-              ticks: {
-                min: 0, // Set the minimum value
-                max: 100, // Set the maximum value
+      ]
+    };
+  };
+  function prepareChargeChartOptions() {
+    return {
+      scales: {
+        yAxes: [
+          {
+            id: 'y-ax-cd',
+            type: 'linear',
+            position: 'left',
+            ticks: {
+              min: 0, // Set the minimum value
+              max: 100, // Set the maximum value
+            },
+          },
+          {
+            id: 'y-ax-soc',
+            type: 'linear',
+            ticks: {
+              afterBuildTicks: function (scale) {
+                scale.ticks = [0, 25, 50, 75, 100]; // Adjust the tick values as needed
               },
             },
-            {
-              id: 'y-ax-soc',
-              type: 'linear',
-              position: 'right',
-            },
-          ],
-        },
+          },
+        ],
       },
     };
-    
-    
-    
-  };
-
+  }
+  
 export function prepareChargeChart(data){
     const charge_chart_data = prepareChargeChartData(data)
+    const charge_chart_options = prepareChargeChartOptions()
     // const chart = new Chart({data: charge_chart_data})
     // Line data={charge_chart_data}
-    const options = {
-        scales: {
-          x: {
-            position: 'bottom',
-          },
-        },
-        plugins: {
-          legend: {
-            display: true, // Set to true to show the legend, false to hide it
-          },
-        },
-        // Add other options as needed
-      };
-    return <Line data={charge_chart_data} options ={options} />
+    return <Line data={charge_chart_data} options = {charge_chart_options} />
 
 }
