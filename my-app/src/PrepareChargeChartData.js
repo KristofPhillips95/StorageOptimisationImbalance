@@ -28,28 +28,12 @@ export function prepareChargeChartData(data){
       labels,
       datasets: [
         {
-          label: 'Charge',
-          data: [...charge_known, ...charge_fc],
-          type: 'bar',
-          backgroundColor: 'rgb(192, 75, 192)',
-          yAxisID: 'y-ax-cd', // Assign to the left y-axis
-          barThickness: 'flex', // Set to 'flex' to occupy the full available space
-        },
-        {
-          label: 'Discharge',
-          data: [...discharge_known.map(value => -value), ...discharge_fc.map(value => -value)],
-          type: 'bar',
-          backgroundColor: 'rgb(192, 75, 0)',
-          yAxisID: 'y-ax-cd', // Assign to the left y-axis
-          barThickness: 'flex', // Set to 'flex' to occupy the full available space
-        },
-        {
           label: 'SOC (Known)',
           data: [...soc_known, ...Array(nb_ts_before_fc - soc_known.length).fill(null)],
           fill: false,
           borderColor: 'rgb(0, 75, 192)',
           tension: 0.1,
-          yAxisID: 'y-ax-soc', // Assign to the right y-axis
+          yAxisID: 'A', // Assign to the soc y-axis
         },
         {
           label: 'SOC (Forecast)',
@@ -58,41 +42,75 @@ export function prepareChargeChartData(data){
           borderColor: 'rgb(0, 75, 192)',
           tension: 0.1,
           borderDash: [5, 5],
-          yAxisID: 'y-ax-soc', // Assign to the right y-axis
-        }
+          yAxisID: 'A', // Assign to the soc y-axis
+        },
+        {
+          label: 'Charge',
+          data: [...charge_known, ...charge_fc],
+          type: 'bar',
+          backgroundColor: 'rgb(192, 75, 192)',
+          yAxisID: 'B', // Assign to the cd y-axis
+          barThickness: 20, // Set to 'flex' to occupy the full available space
+        },
+        {
+          label: 'Discharge',
+          data: [...discharge_known.map(value => -value), ...discharge_fc.map(value => -value)],
+          type: 'bar',
+          backgroundColor: 'rgb(192, 75, 0)',
+          yAxisID: 'B', // Assign to the cd y-axis
+          barThickness: 20, // Set to 'flex' to occupy the full available space
+        },
       ]
     };
   };
-  function prepareChargeChartOptions() {
-    return {
-      scales: {
-        yAxes: [
-          {
-            id: 'y-ax-cd',
-            type: 'linear',
-            position: 'left',
-            ticks: {
-              min: 0, // Set the minimum value
-              max: 100, // Set the maximum value
-            },
-          },
-          {
-            id: 'y-ax-soc',
-            type: 'linear',
-            ticks: {
-              afterBuildTicks: function (scale) {
-                scale.ticks = [0, 25, 50, 75, 100]; // Adjust the tick values as needed
-              },
-            },
-          },
-        ],
+function prepareChargeChartOptions() {
+  console.log("Preparing charge chart options");
+
+  return {
+    plugins: {
+      title: {
+        display: true,
+        text: 'Storage operation',
+        font: {
+          size: 18, // Adjust the font size as needed
+        },
       },
-    };
+    },
+      scales: {
+          A: {
+              type: 'linear',
+              position: 'left',
+              min:0,
+              max:4,
+              title: {
+                display: true,
+                text: "SOC (MWh)",
+                font: {
+                    size: 14, // Adjust the font size as needed
+                },
+            },
+          },
+          B: {
+              type: 'linear',
+              position: 'right',
+              min:-2,
+              max:2,
+              title: {
+                display: true,
+                text: "(Dis)charge (MW)",
+                font: {
+                    size: 14, // Adjust the font size as needed
+                },
+            },
+          }
+      }
   }
+}
   
 export function prepareChargeChart(data){
     const charge_chart_data = prepareChargeChartData(data)
-    const charge_chart_options = prepareChargeChartOptions()
+    let charge_chart_options;
+    charge_chart_options = prepareChargeChartOptions()
     // const chart = new Chart({data: charge_chart_data})
     // Line data={charge_chart_data}
     return <Line data={charge_chart_data} options = {charge_chart_options} />
