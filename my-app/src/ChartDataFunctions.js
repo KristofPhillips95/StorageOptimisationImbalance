@@ -3,23 +3,49 @@ import { Line } from 'react-chartjs-2';
 export function prepareChart(data,type) {
     console.log("Preparing chart")
     const chart_data = prepareChartData(data,type);
-  
+    let title
+    let ylabel
+    if (type == "Imba") {
+        title = "System Imbalance"
+        ylabel = "SI (MW)"
+        }
+    else{
+        title = "Imbalance Price"
+        ylabel = "Price (EURO)"
+    }
     const options = {
         scales: {
-          x: {
-            position: 'bottom',
-          },
+            x: {
+                position: 'bottom',
+            },
+            y: {
+                axis: 'y', // Corrected property name
+                title: {
+                    display: true,
+                    text: ylabel,
+                    font: {
+                        size: 14, // Adjust the font size as needed
+                    },
+                },
+            },
         },
         plugins: {
-          legend: {
-            display: true, // Display the legend
-            position: 'top', // Set the position of the legend
-            labels: {
-              filter: function (legendItem, chartData) {
-                return legendItem.datasetIndex === 0 ||legendItem.datasetIndex === 4; // Show only the first legend label
-              },
+            title: {
+                display: true,
+                text: title, // Set the title text here
+                font: {
+                    size: 16, // Adjust the font size as needed
+                },
+        },
+            legend: {
+                display: type == "Imba", // Display the legend
+                position: 'top', // Set the position of the legend
+                labels: {
+                filter: function (legendItem, chartData) {
+                    return legendItem.datasetIndex === 0 ||legendItem.datasetIndex === 4; // Show only the first legend label
+                },
+                },
             },
-          },
         },
         // Add other options as needed
       };
