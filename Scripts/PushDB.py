@@ -2,37 +2,61 @@ import datetime
 # import pandas as pd
 # import os
 import requests
-from predict_imb_price import pred_SI
+import predict_imb_price
 import time
+api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
 
+prev_soc = 2
 def write_item_API_and_reschedule(scheduler, interval=60,index=0):
     # Schedule the next call first
-    scheduler.enter(interval, 1, write_item_API_and_reschedule, (scheduler, interval,index+1,))
+    scheduler.enter(interval, 1, write_item_API_and_reschedule, (scheduler, interval,index+1))
     # Then do your stuff
-    write_item_API(index)
+    socs_returned = write_item_API(index)
 
-def try_creating_item(index):
-    SI_FC, last_si, quantiles = pred_SI(dev='cpu')
-    prices_fc_spread = dict()
-    last_si_time = last_si[1] + datetime.timedelta(minutes=60)
-    fc_times = [(last_si_time + datetime.timedelta(minutes=15 * (fc_step+1))).strftime("%H:%M:%S") for fc_step in
-                range(SI_FC.shape[0])]
-    print(SI_FC.shape)
-    writing_time = datetime.datetime.now().strftime('%H:%M:%S')
+def try_creating_item(index,prev_soc):
+    # Obtain relevant values from the forecaster
+    si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, \
+    (last_si_value, last_si_time), (last_imbPrice_value, last_imbPrice_dt), (c, d, soc) \
+        = predict_imb_price.call_prediction(prev_soc)
+
+    # Establish a list of future times for which the forecasts are made
+    fc_times = [(curr_qh + datetime.timedelta(minutes=15 * (fc_step + 1))).strftime("%d %H:%M:%S") for fc_step in
+                range(si_quantile_fc.shape[0])]
+
+    # Establish a list of times for which values are unknown
+    unknown_times = [(last_si_time + datetime.timedelta(minutes=15 * (fc_step + 1))).strftime("%d %H:%M:%S") for fc_step
+                     in
+                     range(si_quantile_fc.shape[0]) if
+                     (last_si_time + datetime.timedelta(minutes=15 * (fc_step + 1))) <= curr_qh]
+
+    # Convert the 2d imbalance forecast array to a dictionary with timesteps as keys
+    si_quantile_fc_dict = dict()
     for i, fc_time in enumerate(fc_times):
-        prices_fc_spread[fc_time] = [str(SI_FC[i, q]) for q in range(SI_FC.shape[1])]
+        si_quantile_fc_dict[fc_time] = [str(si_quantile_fc[i, q]) for q in range(si_quantile_fc.shape[1])]
+
+    quantile_price_fc_dict = dict()
+    for i, fc_time in enumerate(fc_times):
+        quantile_price_fc_dict[fc_time] = [str(quantile_price_fc[i, q]) for q in range(quantile_price_fc.shape[1])]
+
+    writing_time = datetime.datetime.now()
     data = {
         "id": index,
-        "time": last_si_time.strftime('%H:%M:%S'),
-        "imba_price": last_si[0],
-        "imba_price_fc": 1,
-        "charge": 1,
-        "soc": 1,
-        "fc_spread": prices_fc_spread,
+        "curr_qh": curr_qh.strftime('%d %H:%M:%S'),
+        "last_imbPrice_value": last_imbPrice_value,
+        "last_imbPrice_dt": last_imbPrice_dt.strftime('%d %H:%M:%S'),
+        "last_si_value": last_si_value,
+        "last_si_time": last_si_time.strftime('%d %H:%M:%S'),
+        "charge": c.tolist(),
+        "discharge": d.tolist(),
+        "soc": soc.tolist(),
         "quantiles": quantiles,
-        "writing time": writing_time
-
+        "si_quantile_fc": si_quantile_fc_dict,
+        "avg_price_fc": avg_price_fc.tolist(),
+        "quantile_price_fc": quantile_price_fc_dict,
+        "writing_time": writing_time.strftime('%d %H:%M:%S'),
+        "unkown_times": unknown_times
     }
+
     index+=1
     return data
 
@@ -58,31 +82,21 @@ def write_item_API(index, max_retries=7, current_retry=0):
     Example:
      write_item_API(index=123, max_retries=3)
     """
+    global prev_soc
     print(index)
     try:
-        data = try_creating_item(index=index)
-        print(f"Writing now to API:", data["writing time"])
-        response = requests.put("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items", json=data)
+        data = try_creating_item(index=index,prev_soc=prev_soc)
+        print(f"Writing now to API:", data["writing_time"])
+        response = requests.put(api_link, json=data)
         print(response.text)
+        prev_soc = data["soc"][1]
     except Exception as e:
         print(f"Not writing to API:", e)
         current_retry += 1
         if current_retry <= max_retries:
             #Wait 2 mins before retrying
-            time.sleep(120)
+            time.sleep(60)
             print(f"Retrying (attempt {current_retry}) to create and write item")
             write_item_API(index=index, max_retries=max_retries, current_retry=current_retry)
         else:
             print(f"Maximum retries reached. Exiting.")
-
-
-
-    # filename = os.path.join("..", "time_file.csv")
-    # row = pd.DataFrame(data=[current_time], columns=["Timestamp"])
-    #
-    # if os.path.isfile(filename):
-    #     df_times = pd.read_csv(filename, index_col=0)
-    #     df_times = pd.concat([df_times, row], ignore_index=True)
-    # else:
-    #     df_times = row
-    # df_times.to_csv(filename)
