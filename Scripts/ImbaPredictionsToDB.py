@@ -4,7 +4,7 @@ import datetime
 import predict_imb_price
 
 #Establish ID of object to be pushed to DB
-id = 1
+id = 3
 
 #API link to push to DB
 api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
@@ -18,8 +18,12 @@ si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh,\
     = predict_imb_price.call_prediction(soc_0)
 
 #Establish a list of future times for which the forecasts are made
-fc_times = [(last_si_time + datetime.timedelta(minutes=15 * (fc_step+1))).strftime("%d %H:%M:%S") for fc_step in
+fc_times = [(curr_qh + datetime.timedelta(minutes=15 * (fc_step+1))).strftime("%d %H:%M:%S") for fc_step in
                 range(si_quantile_fc.shape[0])]
+
+#Establish a list of times for which values are unknown
+unknown_times = [(last_si_time + datetime.timedelta(minutes=15 * (fc_step+1))).strftime("%d %H:%M:%S") for fc_step in
+                range(si_quantile_fc.shape[0]) if (last_si_time + datetime.timedelta(minutes=15 * (fc_step+1)))<=curr_qh]
 
 #Convert the 2d imbalance forecast array to a dictionary with timesteps as keys
 si_quantile_fc_dict = dict()
@@ -45,7 +49,8 @@ data = {
     "si_quantile_fc": si_quantile_fc_dict,
     "avg_price_fc": avg_price_fc.tolist(),
     "quantile_price_fc":quantile_price_fc_dict,
-    "writing_time": writing_time.strftime('%d %H:%M:%S')
+    "writing_time": writing_time.strftime('%d %H:%M:%S'),
+    "unkown_times":unknown_times
 }
 
 # data = {
