@@ -1,8 +1,8 @@
 import { Line, getDatasetAtEvent } from 'react-chartjs-2';
 
 
-export function preparePriceChart(data) {
-  const price_chart_data = preparePriceChartData(data);
+export function prepareImbalanceChart(data) {
+  const price_chart_data = prepareImbalanceChartData(data);
 
   const options = {
       scales: {
@@ -26,9 +26,7 @@ export function preparePriceChart(data) {
 
   return <Line data={price_chart_data} options={options} />;
 };
-
-//TODO This function is generic for Price and imba and should probably be separated into a file imported by both relevant chart generators
-function preparePriceChartData(data) {
+function prepareImbalanceChartData(data) {
   if (data === null || data === undefined) {
       console.log("Data is still null or undefined. Fetching in progress or failed.");
       return { labels: [], datasets: [] };
@@ -45,7 +43,9 @@ function preparePriceChartData(data) {
 
   const x_labels = [...past_times_known,past_times_unknown, ...future_times];
   const actual_imba_past = sortedData.map(item => item.last_imbPrice_value);
+  console.log(actual_imba_past)
 
+  // console.log(x_labels)
   console.log(past_times_known)
 
   const imbaChartDataSets = [

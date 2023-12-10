@@ -1,12 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Line } from 'react-chartjs-2';
-import { preparePriceChart } from './PreparePriceChartData';
 import { renderProfitTable } from './RenderProfitTable';
 import { prepareChargeChart } from './PrepareChargeChartData';
-
+import { prepareChart } from './ChartDataFunctions';
 
 function App_API() {
+  console.log("Entered APP_API")
     const [data, setData] = useState(null);
   
     useEffect(() => {
@@ -23,8 +22,9 @@ function App_API() {
     return <div>Loading...</div>;
   }
 
-  const imba_chart = preparePriceChart(data)
-  // const charge_chart_data = prepareChargeChartData(data)
+
+  const imba_chart_2 = prepareChart(data,"Imba")
+  const price_chart_2 = prepareChart(data,"Price")
   const charge_chart = prepareChargeChart(data)
 
     
@@ -43,7 +43,14 @@ function App_API() {
         <div style={{ marginRight: '20px' }}>
           {data ? (
             <div style={{ width: '600px', height: '300px', margin: '10px' }}>
-              {imba_chart}
+              {imba_chart_2}
+            </div>
+          ) : (
+            'Loading...'
+          )}
+          {data ? (
+            <div style={{ width: '600px', height: '300px', margin: '10px' }}>
+              {price_chart_2}
             </div>
           ) : (
             'Loading...'
