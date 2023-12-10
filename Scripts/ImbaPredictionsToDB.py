@@ -4,7 +4,7 @@ import datetime
 import predict_imb_price
 
 #Establish ID of object to be pushed to DB
-id = 3
+index = 3
 
 #API link to push to DB
 api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
@@ -36,7 +36,7 @@ for i, fc_time in enumerate(fc_times):
 
 writing_time = datetime.datetime.now()
 data = {
-    "id": id,
+    "id": index,
     "curr_qh":curr_qh.strftime('%d %H:%M:%S'),
     "last_imbPrice_value": last_imbPrice_value,
     "last_imbPrice_dt": last_imbPrice_dt.strftime('%d %H:%M:%S'),
