@@ -13,6 +13,8 @@ import copy
 import math
 sys.path.insert(0,"train_SI_forecaster")
 sys.path.insert(0,"scaling")
+sys.path.insert(0,"optimization")
+from opti_problem import OptiProblem
 import scaling
 import functions_data_preprocessing as fdp
 sys.path.append(f"{os.path.dirname(__file__)}/train_SI_forecaster") #Need to do this for loading pytorch models
@@ -462,6 +464,30 @@ def call_prediction(soc_0):
     la = 12
     lb = 8
 
+    OP_params_dict = {
+    #Dict containing info of optimization program
+        'max_charge': 1,
+        'max_discharge': 1,
+        'eff_d': 0.95,
+        'eff_c': 0.95,
+        'max_soc': 4,
+        'min_soc': 0,
+        'soc_0': soc_0,
+        'ts_len': 1,
+        'lookahead': la,
+        'cyclic_bc': True,
+        'combined_c_d_max': True, #If True, c+d<= P_max; if False: c<=P_max; d<= P_max
+        'degradation': False,
+        'inv_cost': 0,
+        'gamma': 0,
+        'smoothing': "quadratic"
+    }
+
+    op = OptiProblem(OP_params_dict)
+    prices = np.random.rand(la)
+
+    d,c,soc = op.solve_opti(prices)
+
 
     (last_si_value,last_si_dt),(last_imbPrice_value,last_imbPrice_dt) = get_most_recent()
 
@@ -472,6 +498,9 @@ def call_prediction(soc_0):
     avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
 
     c,d,soc = optimize_schedule(soc_0=soc_0,avg_price_forecast=avg_price_fc)
+    c_opt,d_opt,soc_opt = op.solve_opti(avg_price_fc)
+
+    x=1
 
     return si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_dt), (last_imbPrice_value,last_imbPrice_dt), (c,d,soc)
 
