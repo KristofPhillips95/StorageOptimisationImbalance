@@ -97,7 +97,7 @@ function prepareChargeChartOptions() {
               max:2,
               title: {
                 display: true,
-                text: "(Dis)charge (MW)",
+                text: "(Dis) Charge (MW)",
                 font: {
                     size: 14, // Adjust the font size as needed
                 },

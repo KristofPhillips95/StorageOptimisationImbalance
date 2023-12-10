@@ -24,7 +24,7 @@ print("Starting the script")
 
 # Schedule the first execution at 10 minutes past the next full quarter hour
 my_scheduler.enter(delay_until_next_quarter_hour + 10 * 60, 1, write_item_API_and_reschedule, (my_scheduler, interval, start_index))
-my_scheduler.enter(0, 1, write_item_API_and_reschedule, (my_scheduler, interval, start_index))
+#my_scheduler.enter(0, 1, write_item_API_and_reschedule, (my_scheduler, interval, start_index))
 
 # Run the scheduler
 my_scheduler.run()
