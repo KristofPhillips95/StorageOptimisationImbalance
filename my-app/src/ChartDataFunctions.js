@@ -16,7 +16,7 @@ export function prepareChart(data,type) {
             position: 'top', // Set the position of the legend
             labels: {
               filter: function (legendItem, chartData) {
-                return legendItem.datasetIndex === 0 ||legendItem.datasetIndex === 1 ; // Show only the first legend label
+                return legendItem.datasetIndex === 0 ||legendItem.datasetIndex === 4; // Show only the first legend label
               },
             },
           },
@@ -36,9 +36,9 @@ function prepareChartData(data,type) {
     const last_Data_value = sortedData[sortedData.length - 1];
     const past_times_unknown = last_Data_value.unkown_times
     const nb_ts_before_fc = past_times_known.length+past_times_unknown.length
-    console.log(past_times_known)
-    console.log(past_times_unknown)
-    console.log(nb_ts_before_fc)
+    // console.log(past_times_known)
+    // console.log(past_times_unknown)
+    // console.log(nb_ts_before_fc)
     let future_times = Object.keys(last_Data_value.si_quantile_fc);
     future_times = future_times.sort((a, b) => a.localeCompare(b));
     // console.log(future_times)
@@ -57,8 +57,7 @@ function prepareChartData(data,type) {
 
     // console.log(x_labels)
     // console.log(past_times_known)
-
-    const imbaChartDataSets = [
+    const chartDataSets = [
         {
         label: 'Historical',
         data: known_values,
@@ -66,29 +65,41 @@ function prepareChartData(data,type) {
         borderColor: 'rgb(75, 192, 192)',
         tension: 0.1
         },
-        ...CreateForecastDataSet(future_times,quantiles,last_Data_value,nb_ts_before_fc,type)
+        ...CreateForecastDataSet(future_times,quantiles,last_Data_value,nb_ts_before_fc,type),
+
     ]
+    if(type == "Price"){
+        chartDataSets.push(
+            {
+                label: 'Avg fc',
+                data: [...Array(nb_ts_before_fc).fill(null),...last_Data_value.avg_price_fc],
+                fill: false,
+                borderColor: 'rgb(75, 192, 20)',
+                tension: 0.1,
+                borderWidth: 1,
+                }
+        )
+    }
     return {
         labels:x_labels,
-        datasets: imbaChartDataSets,
+        datasets: chartDataSets,
     };
 };
 function getDatasetColors(future_times,quantiles){
 const datasetColors = future_times.map((time, index) => {
-    let q_prev = 1 
+    let q_prev; 
     if (index > 0) {
     q_prev = quantiles[index-1]
     }
     else{
     q_prev = 0
     }
-    const alpha = -(q_prev - quantiles[index])*4; // Adjust as needed
+    const alpha = -(q_prev - quantiles[index])*3; // Adjust as needed
 
     return `rgba(105, 105, 105, ${alpha})`; // Dark grey with varying transparency
 });
 return datasetColors
 };
-
 function CreateForecastDataSet(future_times,quantiles,last_Data_value,nb_ts_before_fc,type){
     const forecasts = [];
     const nb_qs = quantiles.length
@@ -136,4 +147,4 @@ function CreateForecastDataSet(future_times,quantiles,last_Data_value,nb_ts_befo
       forecasts.push(dataset);
     }
     return forecasts
-  };
+};

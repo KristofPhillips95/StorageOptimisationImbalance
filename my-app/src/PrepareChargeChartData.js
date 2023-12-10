@@ -22,38 +22,69 @@ export function prepareChargeChartData(data){
     const discharge_known = knownElements.map(element => element.discharge[0]);
     const soc_known = knownElements.map(element => element.soc[0]);
 
-
-
     const labels = [...past_times_known,...past_times_unknown,...future_times]
-
-
-
+    console.log(knownElements)
     return {
       labels,
       datasets: [
         {
           label: 'Charge',
-          data: [...charge_known,...charge_fc],
-          fill: false,
-          borderColor: 'rgb(192, 75, 192)',
-          tension: 0.1
+          data: [...charge_known, ...charge_fc],
+          type: 'bar',
+          backgroundColor: 'rgb(192, 75, 192)',
+          yAxisID: 'y-ax-cd', // Assign to the left y-axis
+          barThickness: 'flex', // Set to 'flex' to occupy the full available space
         },
         {
           label: 'Discharge',
-          data: [...discharge_known,...discharge_fc],
-          fill: false,
-          borderColor: 'rgb(192, 75, 0)',
-          tension: 0.1
+          data: [...discharge_known.map(value => -value), ...discharge_fc.map(value => -value)],
+          type: 'bar',
+          backgroundColor: 'rgb(192, 75, 0)',
+          yAxisID: 'y-ax-cd', // Assign to the left y-axis
+          barThickness: 'flex', // Set to 'flex' to occupy the full available space
         },
         {
-          label: 'State of charge',
-          data: [...soc_fc,...soc_fc],
+          label: 'State of charge (Known)',
+          data: [...soc_known, ...Array(nb_ts_before_fc - soc_known.length).fill(null)],
           fill: false,
           borderColor: 'rgb(0, 75, 192)',
-          tension: 0.1
+          tension: 0.1,
+          yAxisID: 'y-ax-soc', // Assign to the right y-axis
+        },
+        {
+          label: 'State of charge (Forecast)',
+          data: [...Array(nb_ts_before_fc - 1).fill(null), ...soc_fc],
+          fill: false,
+          borderColor: 'rgb(0, 75, 192)',
+          tension: 0.1,
+          borderDash: [5, 5],
+          yAxisID: 'y-ax-soc', // Assign to the right y-axis
         }
-      ]
+      ],
+      options: {
+        scales: {
+          yAxes: [
+            {
+              id: 'y-ax-cd',
+              type: 'linear',
+              position: 'left',
+              ticks: {
+                min: 0, // Set the minimum value
+                max: 100, // Set the maximum value
+              },
+            },
+            {
+              id: 'y-ax-soc',
+              type: 'linear',
+              position: 'right',
+            },
+          ],
+        },
+      },
     };
+    
+    
+    
   };
 
 export function prepareChargeChart(data){
