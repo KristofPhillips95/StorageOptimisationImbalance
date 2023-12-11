@@ -25,8 +25,7 @@ def try_creating_item(index,prev_soc):
 
     # Establish a list of times for which values are unknown
     unknown_times = [(last_si_time + datetime.timedelta(minutes=15 * (fc_step + 1))).strftime("%d %H:%M:%S") for fc_step
-                     in
-                     range(si_quantile_fc.shape[0]) if
+                     in range(si_quantile_fc.shape[0]) if
                      (last_si_time + datetime.timedelta(minutes=15 * (fc_step + 1))) <= curr_qh]
 
     # Convert the 2d imbalance forecast array to a dictionary with timesteps as keys
@@ -60,7 +59,6 @@ def try_creating_item(index,prev_soc):
     index+=1
     return data
 
-
 def write_item_API(index, max_retries=7, current_retry=0):
     """
     Attempt to create and write an item to an API with retry mechanism.
@@ -89,7 +87,7 @@ def write_item_API(index, max_retries=7, current_retry=0):
         print(f"Writing now to API:", data["writing_time"])
         response = requests.put(api_link, json=data)
         print(response.text)
-        prev_soc = data["soc"][1]
+        prev_soc = data["soc"][0]
     except Exception as e:
         print(f"Not writing to API:", e)
         current_retry += 1
