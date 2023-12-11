@@ -2,7 +2,9 @@ import numpy as np
 import cvxpy as cp
 
 class OptiProblem():
-
+    """
+    Class of Optimization problems
+    """
     def __init__(self,OP_params):
 
         super(OptiProblem,self).__init__()
@@ -10,10 +12,24 @@ class OptiProblem():
         self.init_opti_problem()
 
     def __call__(self,param_values):
+        """
+        Function that:
+        (i) sets the variable parameter values to those given as function arguments --> problem is uniquely defined
+        (ii) solves the optimization problem
+        (iii) retrieves the optimized values of the decision variables
+
+        :params:
+        -params_values: list np arrays
+            list of arrays containing the values of variable parameters corresponding to those contained in self.params
+
+        :return:
+        - var_vals: list of np arrays
+            list of arrays containing the optimized values of the decision variables corresponding to those in self.vars
+        """
 
         self.set_params_opti(param_values)
 
-        self.prob.solve(solver=cp.GUROBI)
+        self.prob.solve(solver=cp.ECOS)
 
         var_vals = self.get_var_values()
 
@@ -21,9 +37,22 @@ class OptiProblem():
 
     def init_opti_problem(self):
         """
-        Functions does basically the same as opti_problem, but is designed to be exactly the same as what is done in the research proposal
-        :param params_dict:
+        Defines the optimization problem by setting the non-variable parameters.
+
+        :params:
+        -params_dict: dict
+            Dictionary containing the relevant non-variable parameters required to define the optimization problem
+
+        :set:
+        -self.prob: cp.Problem()
+            cvxpy problem that can be optimized
+        -self.params: list of cp.Parameter
+            list of all the variable parameters that need to be defined before calling the optimization
+        -self.vars: list of cp.Var
+            list of all the variables of the optimization problem
+
         :return:
+            NA
         """
         # Retrieve optimization parameters
         D_out = self.OP_params['lookahead']
@@ -87,6 +116,10 @@ class OptiProblem():
         self.vars = [net_discharge,d,c,s]
 
     def get_opti_matrices(self):
+        """
+        Function returning a list of matrices that can be used to define storage system-related optimization problems in matrix form
+        """
+
         D_out = self.OP_params['lookahead']
         A_latest = np.zeros((D_out, D_out))
         for i in range(D_out):
@@ -112,9 +145,11 @@ class OptiProblem():
         return A_first, A_last, A_latest, A_shift, a_first, a_last
 
     def get_opti_problem(self):
+
         return self.prob, self.params, self.vars
 
     def get_var_values(self):
+
         var_values = []
         for v in self.vars:
             var_values.append(v.value)
@@ -124,6 +159,3 @@ class OptiProblem():
 
         for (i,p_val) in enumerate(param_values):
             self.params[i].value = p_val
-
-
-
