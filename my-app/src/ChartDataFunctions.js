@@ -57,7 +57,7 @@ function prepareChartData(data,type) {
         console.log("Data is still null or undefined. Fetching in progress or failed.");
         return { labels: [], datasets: [] };
         }
-    const sortedData = data.slice().sort((a, b) => a.id - b.id).slice(-12);
+    const sortedData = data.slice().sort((a, b) => a.id - b.id);
     const past_times_known = sortedData.map(item => item.last_si_time);
     const last_Data_value = sortedData[sortedData.length - 1];
     const past_times_unknown = last_Data_value.unkown_times
@@ -112,18 +112,18 @@ function prepareChartData(data,type) {
     };
 };
 function getDatasetColors(future_times,quantiles){
-const datasetColors = future_times.map((time, index) => {
-    let q_prev; 
-    if (index > 0) {
-    q_prev = quantiles[index-1]
-    }
-    else{
-    q_prev = 0
-    }
-    const alpha = -(q_prev - quantiles[index])*3; // Adjust as needed
+    const datasetColors = future_times.map((time, index) => {
+        let q_prev; 
+        if (index > 0) {
+        q_prev = quantiles[index-1]
+        }
+        else{
+        q_prev = 0
+        }
+        const alpha = -(q_prev - quantiles[index])*3; // Adjust as needed
 
-    return `rgba(105, 105, 105, ${alpha})`; // Dark grey with varying transparency
-});
+        return `rgba(105, 105, 105, ${alpha})`; // Dark grey with varying transparency
+    });
 return datasetColors
 };
 function CreateForecastDataSet(future_times,quantiles,last_Data_value,nb_ts_before_fc,type){

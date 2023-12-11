@@ -50,7 +50,7 @@ export function prepareChargeChartData(data){
           type: 'bar',
           backgroundColor: 'rgb(192, 75, 192)',
           yAxisID: 'B', // Assign to the cd y-axis
-          barThickness: 20, // Set to 'flex' to occupy the full available space
+          barThickness: 10, // Set to 'flex' to occupy the full available space
         },
         {
           label: 'Discharge',
@@ -58,7 +58,7 @@ export function prepareChargeChartData(data){
           type: 'bar',
           backgroundColor: 'rgb(192, 75, 0)',
           yAxisID: 'B', // Assign to the cd y-axis
-          barThickness: 20, // Set to 'flex' to occupy the full available space
+          barThickness: 10, // Set to 'flex' to occupy the full available space
         },
       ]
     };
