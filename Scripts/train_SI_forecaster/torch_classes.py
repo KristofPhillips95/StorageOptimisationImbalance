@@ -57,7 +57,6 @@ class Loss_smoothing(nn.Module):
 
         return loss
 
-
 """ 
 Basic unidirectional encoder-decoder without attention. 
 """
