@@ -215,10 +215,10 @@ def price_from_SI(SI_FC,MO):
             imbalance price forecast corresponding one-on-one with the SI forecasts given as input
     """
 
-    price_fc = np.zeros_like(SI_FC)
-
-    lookahead = SI_FC.shape[0]
+    lookahead = MO.shape[0]
     n_quant = SI_FC.shape[1]
+
+    price_fc = np.zeros((lookahead,n_quant))
 
     for i in range(lookahead):
         for j in range(n_quant):
@@ -421,10 +421,6 @@ def optimize_schedule(soc_0,avg_price_forecast):
 
 
 
-
-
-
-
 def call_prediction(soc_0):
 
     """
@@ -482,8 +478,6 @@ def call_prediction(soc_0):
         'smoothing': "quadratic"
     }
 
-    op = OptiProblem(OP_params_dict)
-
     (last_si_value,last_si_dt),(last_imbPrice_value,last_imbPrice_dt) = get_most_recent()
 
     MO_past,MO_fut = fetch_MO(lookahead=la,lookback=lb)
@@ -491,6 +485,11 @@ def call_prediction(soc_0):
     si_quantile_fc, curr_qh, quantiles = pred_SI(lookahead=la,lookback=lb,dev=dev)
 
     avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
+
+    OP_params_dict['lookahead'] = avg_price_fc.shape[0]
+    print(f"lookahead: {OP_params_dict['lookahead']}")
+    op = OptiProblem(OP_params_dict)
+
 
     _,d_opt,c_opt,soc_opt = op([soc_0,avg_price_fc])
 
