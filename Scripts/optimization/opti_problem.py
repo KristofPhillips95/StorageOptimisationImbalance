@@ -7,34 +7,19 @@ class OptiProblem():
 
         super(OptiProblem,self).__init__()
         self.OP_params = OP_params
-        self.set_opti_problem()
+        self.init_opti_problem()
 
-    def get_opti_matrices(self):
-        D_out = self.OP_params['lookahead']
-        A_latest = np.zeros((D_out, D_out))
-        for i in range(D_out):
-            for j in range(D_out):
-                if i == j:
-                    if i > 0:
-                        A_latest[i, j] = 1
-        A_first = np.zeros((D_out, D_out))
-        A_last = np.zeros((D_out, D_out))
-        A_last[D_out - 1, D_out - 1] = 1
-        A_first[0, 0] = 1
-        a_first = np.zeros(D_out)
-        a_last = np.zeros(D_out)
-        a_first[0] = 1
-        a_last[D_out - 1] = 1
-        A_shift = np.zeros((D_out, D_out))
-        for i in range(D_out):
-            for j in range(D_out):
-                if i == j + 1:
-                    if i > 0:
-                        A_shift[i, j] = 1
+    def __call__(self,param_values):
 
-        return A_first, A_last, A_latest, A_shift, a_first, a_last
+        self.set_params_opti(param_values)
 
-    def set_opti_problem(self):
+        self.prob.solve(solver=cp.GUROBI)
+
+        var_vals = self.get_var_values()
+
+        return var_vals
+
+    def init_opti_problem(self):
         """
         Functions does basically the same as opti_problem, but is designed to be exactly the same as what is done in the research proposal
         :param params_dict:
@@ -45,7 +30,6 @@ class OptiProblem():
         D_in = D_out
         eff_c = self.OP_params['eff_c']
         eff_d = self.OP_params['eff_d']
-        soc_0 = self.OP_params['soc_0']
         soc_max = self.OP_params['max_soc']
         soc_min = self.OP_params['min_soc']
         max_charge = self.OP_params['max_charge']
@@ -62,6 +46,7 @@ class OptiProblem():
         net_discharge = cp.Variable(D_out)
 
         price = cp.Parameter(D_in)
+        soc_0 = cp.Parameter()
 
         constraints = [d >= 0,
                        c >= 0,
@@ -98,24 +83,47 @@ class OptiProblem():
         prob = cp.Problem(objective=objective, constraints=constraints)
 
         self.prob = prob
-        self.params = [price]
+        self.params = [soc_0,price]
         self.vars = [net_discharge,d,c,s]
+
+    def get_opti_matrices(self):
+        D_out = self.OP_params['lookahead']
+        A_latest = np.zeros((D_out, D_out))
+        for i in range(D_out):
+            for j in range(D_out):
+                if i == j:
+                    if i > 0:
+                        A_latest[i, j] = 1
+        A_first = np.zeros((D_out, D_out))
+        A_last = np.zeros((D_out, D_out))
+        A_last[D_out - 1, D_out - 1] = 1
+        A_first[0, 0] = 1
+        a_first = np.zeros(D_out)
+        a_last = np.zeros(D_out)
+        a_first[0] = 1
+        a_last[D_out - 1] = 1
+        A_shift = np.zeros((D_out, D_out))
+        for i in range(D_out):
+            for j in range(D_out):
+                if i == j + 1:
+                    if i > 0:
+                        A_shift[i, j] = 1
+
+        return A_first, A_last, A_latest, A_shift, a_first, a_last
 
     def get_opti_problem(self):
         return self.prob, self.params, self.vars
 
-    def solve_opti(self,param_values):
+    def get_var_values(self):
+        var_values = []
+        for v in self.vars:
+            var_values.append(v.value)
+        return var_values
 
-        #Set parameter values
-        self.params[0].value = param_values
+    def set_params_opti(self,param_values):
 
-        #Solve optimization
-        self.prob.solve(solver=cp.GUROBI) #TODO install gurobi
+        for (i,p_val) in enumerate(param_values):
+            self.params[i].value = p_val
 
-        d = self.vars[1].value
-        c = self.vars[2].value
-        soc = self.vars[3].value
-
-        return d,c,soc
 
 

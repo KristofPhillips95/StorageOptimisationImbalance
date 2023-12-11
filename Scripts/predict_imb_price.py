@@ -452,11 +452,11 @@ def call_prediction(soc_0):
             Value of latest known full qh imbalance price.
         -last_imbPrice_dt: datetime
             quarter hour of latest known imbalance price
-        -c: (LA) np array type float, positive values
-            vector of charge decisions
-        -d: (LA) np array type float, positive values
-            vector of discharge decisions
-        -soc: (LA+1) np array type float
+        -c_opt: (LA) np array type float, positive values
+            vector of optimized charge decisions
+        -d_opt: (LA) np array type float, positive values
+            vector of optimized discharge decisions
+        -soc_opt: (LA+1) np array type float
             vector of optimized state of charge evolution, soc[0] = soc_0
     """
 
@@ -472,7 +472,6 @@ def call_prediction(soc_0):
         'eff_c': 0.95,
         'max_soc': 4,
         'min_soc': 0,
-        'soc_0': soc_0,
         'ts_len': 1,
         'lookahead': la,
         'cyclic_bc': True,
@@ -484,10 +483,6 @@ def call_prediction(soc_0):
     }
 
     op = OptiProblem(OP_params_dict)
-    prices = np.random.rand(la)
-
-    d,c,soc = op.solve_opti(prices)
-
 
     (last_si_value,last_si_dt),(last_imbPrice_value,last_imbPrice_dt) = get_most_recent()
 
@@ -497,12 +492,9 @@ def call_prediction(soc_0):
 
     avg_price_fc,quantile_price_fc = get_price_fc(SI_FC=si_quantile_fc,MO=MO_fut,quantiles=quantiles)
 
-    c,d,soc = optimize_schedule(soc_0=soc_0,avg_price_forecast=avg_price_fc)
-    c_opt,d_opt,soc_opt = op.solve_opti(avg_price_fc)
+    _,d_opt,c_opt,soc_opt = op([soc_0,avg_price_fc])
 
-    x=1
-
-    return si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_dt), (last_imbPrice_value,last_imbPrice_dt), (c,d,soc)
+    return si_quantile_fc, avg_price_fc, quantile_price_fc, quantiles, curr_qh, (last_si_value,last_si_dt), (last_imbPrice_value,last_imbPrice_dt), (c_opt,d_opt,soc_opt)
 
 
 if __name__ == '__main__':
