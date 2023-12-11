@@ -203,7 +203,7 @@ def set_arrays_to_tensors_device(list_arrays,dev):
 
     return global_list
 
-def initialize_net(dict,dev):
+def initialize_net(dict,dev,type):
 
     input_size_e = dict['input_size_e']
     hidden_size_lstm = dict['hidden_size_lstm']
@@ -213,16 +213,26 @@ def initialize_net(dict,dev):
     layers_d = dict['layers_lstm']
 
 
-
-    net = tc.LSTM_ED(input_size_e=input_size_e,
-                     layers_e = layers_e,
-                     hidden_size_lstm=hidden_size_lstm,
-                     input_size_d=input_size_d,
-                     layers_d=layers_d,
-                     output_dim=output_dim,
-                     dev=dev
-                     )
-
+    if type == 'ED_RNN':
+        net = tc.LSTM_ED(input_size_e=input_size_e,
+                         layers_e = layers_e,
+                         hidden_size_lstm=hidden_size_lstm,
+                         input_size_d=input_size_d,
+                         layers_d=layers_d,
+                         output_dim=output_dim,
+                         dev=dev
+                         )
+    elif type == 'ED_RNN_att':
+        net = tc.LSTM_ED_Attention(input_size_e=input_size_e,
+                         layers_e = layers_e,
+                         hidden_size_lstm=hidden_size_lstm,
+                         input_size_d=input_size_d,
+                         layers_d=layers_d,
+                         output_dim=output_dim,
+                         dev=dev
+                         )
+    else:
+        raise ValueError(f"{type} unsupported type of forecaster")
     return net
 
 def hp_tuning(dict,dict_HPs, list_arrays):
@@ -352,7 +362,7 @@ def run_training(dict_params,dict_HPs,list_arrays):
         input_dict['val_test_feat'] = [feat_val_pt, feat_test_pt]
         input_dict['val_test_lab'] = [lab_val_pt, lab_test_pt]
         input_dict['training_loader'] = training_loader
-        input_dict['net'] = initialize_net(dict_hps_config,dev)
+        input_dict['net'] = initialize_net(dict=dict_hps_config,dev=dev,type=dict_params['forecaster_type'])
         input_dict['config'] = c
         input_dict['lr'] = dict_hps_config['lr']
         c+=1
