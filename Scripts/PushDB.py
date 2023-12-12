@@ -1,9 +1,11 @@
 import datetime
-# import pandas as pd
-# import os
 import requests
 import predict_imb_price
 import time
+import pickle
+
+time_format = "%Y/%m/%d, %H:%M:%S"
+
 api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
 
 prev_soc = 2
@@ -40,11 +42,11 @@ def try_creating_item(index,prev_soc):
     writing_time = datetime.datetime.now()
     data = {
         "id": index,
-        "curr_qh": curr_qh.strftime('%d %H:%M:%S'),
+        "curr_qh": curr_qh.strftime(time_format),
         "last_imbPrice_value": last_imbPrice_value,
-        "last_imbPrice_dt": last_imbPrice_dt.strftime('%d %H:%M:%S'),
+        "last_imbPrice_dt": last_imbPrice_dt.strftime(time_format),
         "last_si_value": last_si_value,
-        "last_si_time": last_si_time.strftime('%d %H:%M:%S'),
+        "last_si_time": last_si_time.strftime(time_format),
         "charge": c.tolist(),
         "discharge": d.tolist(),
         "soc": soc.tolist(),
@@ -52,10 +54,9 @@ def try_creating_item(index,prev_soc):
         "si_quantile_fc": si_quantile_fc_dict,
         "avg_price_fc": avg_price_fc.tolist(),
         "quantile_price_fc": quantile_price_fc_dict,
-        "writing_time": writing_time.strftime('%d %H:%M:%S'),
+        "writing_time": writing_time.strftime(time_format),
         "unkown_times": unknown_times
     }
-
     index+=1
     return data
 
@@ -88,6 +89,7 @@ def write_item_API(index, max_retries=7, current_retry=0):
         response = requests.put(api_link, json=data)
         print(response.text)
         prev_soc = data["soc"][0]
+        process_lts(data)
     except Exception as e:
         print(f"Not writing to API:", e)
         current_retry += 1
@@ -98,3 +100,4 @@ def write_item_API(index, max_retries=7, current_retry=0):
             write_item_API(index=index, max_retries=max_retries, current_retry=current_retry)
         else:
             print(f"Maximum retries reached. Exiting.")
+
