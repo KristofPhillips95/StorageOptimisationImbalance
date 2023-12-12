@@ -2,8 +2,7 @@ import datetime
 import requests
 import predict_imb_price
 import time
-import pickle
-
+from lts_data_handling import process_lts
 time_format = "%Y/%m/%d, %H:%M:%S"
 
 api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
