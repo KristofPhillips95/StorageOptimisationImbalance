@@ -11,7 +11,7 @@ import requests
 
 from decorators import split_along_time
 
-DATETIME_FORMAT = "%Y-%m-%d %H:%S"
+DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 TODAY = dt.date.today()
 YESTERDAY = TODAY - dt.timedelta(days=1)
 
@@ -74,6 +74,47 @@ class EliaPandasClient:
         df = self._process_results(df)
         return df
 
+    def get_decremental_bids(
+            self,
+            start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
+            end: dt.datetime | dt.date | pd.Timestamp = TODAY,
+            **params) -> pd.DataFrame:
+        """Returns raw dataframe of ARC merit order by volume level of 100MW."""
+        dataset="ods140"
+        where_filter = self._construct_where_filter(**locals())
+        params.update({"where": where_filter})
+        df = self._execute_query(dataset, params)
+        df = self._process_results(df)
+        return df
+
+
+    def get_incremental_bids(
+            self,
+            start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
+            end: dt.datetime | dt.date | pd.Timestamp = TODAY,
+            **params) -> pd.DataFrame:
+        """Returns raw dataframe of ARC merit order by volume level of 100MW."""
+        dataset="ods139"
+        where_filter = self._construct_where_filter(**locals())
+        params.update({"where": where_filter})
+        df = self._execute_query(dataset, params)
+        df = self._process_results(df)
+        return df
+
+
+    def get_DA_net_pos(
+            self,
+            start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
+            end: dt.datetime | dt.date | pd.Timestamp = TODAY,
+            **params) -> pd.DataFrame:
+        """Returns raw dataframe of ARC merit order by volume level of 100MW."""
+        dataset="ods023"
+        where_filter = self._construct_where_filter(**locals())
+        params.update({"where": where_filter})
+        df = self._execute_query(dataset, params)
+        df = self._process_results(df)
+        return df
+
 
 
     @split_along_time("5D")
@@ -83,7 +124,7 @@ class EliaPandasClient:
             end: dt.datetime | dt.date | pd.Timestamp = TODAY,
             **params) -> pd.DataFrame:
         """Returns the measured and upscaled photovoltaic power generation on the Belgian grid."""
-        dataset = "ods003"
+        dataset = "ods002"
         where_filter = self._construct_where_filter(**locals())
         params.update({"where": where_filter})
         df = self._execute_query(dataset, params)
@@ -198,6 +239,19 @@ class EliaPandasClient:
     ###########################
     ##OWN METHODS BELOW
     ###############################
+
+    def get_MO(self,
+        start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
+        end: dt.datetime | dt.date | pd.Timestamp = TODAY,
+        **params) -> pd.DataFrame:
+        """Returns the current imbalance prices"""
+        dataset = "ods083"
+        where_filter = self._construct_where_filter(**locals())
+        params.update({"where": where_filter})
+        df = self._execute_query(dataset, params)
+        df = self._process_results(df)
+        return df
+
     def get_DA_schedule_by_fuel(self,
         start: dt.datetime | dt.date | pd.Timestamp = YESTERDAY,
         end: dt.datetime | dt.date | pd.Timestamp = TODAY,

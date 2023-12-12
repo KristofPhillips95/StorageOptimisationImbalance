@@ -1,9 +1,21 @@
 #Connecting ssh
 
-ssh -i ~/.ssh/KristofKULAWS.pem ec2-user@ec2-51-20-92-83.eu-north-1.compute.amazonaws.com
-
+ssh -i ~/.ssh/KristofFirstKeyP.pem ec2-user@ec2-16-170-231-21.eu-north-1.compute.amazonaws.com
 ##############
 #FileTransfer#
 ##############
 
-rsync  --progress -e "ssh -i ~/.ssh/KristofKULAWS.pem" OneDrive\ -\ KU\ Leuven/StorageOptimisationImbalance/Scripts/ ec2-user@ec2-51-20-92-83.eu-north-1.compute.amazonaws.com:~/StorageOptimisationImbalance/Scripts -anv
+rsync --progress -e "ssh -i /home/u0138303/.ssh/KristofFirstKeyP.pem" OneDrive\ -\ KU\ Leuven/StorageOptimisationImbalance/Scripts/ ec2-user@ec2-16-170-231-21.eu-north-1.compute.amazonaws.com:~/StorageOptimImba/Scripts -anv 
+
+############
+# NOHUP
+############
+
+source activate arbitrage
+nohup python -u PushDB_scheduler.py &
+
+
+
+ps -ef |grep nohup 
+
+ps aux | grep python
