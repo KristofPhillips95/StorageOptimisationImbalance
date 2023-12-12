@@ -114,6 +114,17 @@ class LSTM_ED(torch.nn.Module):
 Bi-directional RNNs with attention by chatgpt
 """
 
+class LSTMLayerNorm(torch.nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(LSTMLayerNorm, self).__init__()
+        self.lstm = torch.nn.LSTM(input_size, hidden_size)
+        self.layer_norm = torch.nn.LayerNorm(hidden_size)
+
+    def forward(self, x):
+        output, (hidden, cell) = self.lstm(x)
+        # Apply Layer Normalization to the output of LSTM
+        output = self.layer_norm(output)
+        return output, (hidden, cell)
 
 class AttentionModule(torch.nn.Module):
     def __init__(self, hidden_size_lstm,dev):
@@ -144,12 +155,13 @@ class AttentionModule(torch.nn.Module):
 
 
 class LSTM_ED_Attention(torch.nn.Module):
-    def __init__(self, input_size_e,layers_e, hidden_size_lstm, input_size_d,layers_d,output_dim,dev):
+    def __init__(self, input_size_e,layers_e, hidden_size_lstm, input_size_d,layers_d,output_dim,bidir_e=True,dev='cuda'):
         super(LSTM_ED_Attention, self).__init__()
         self.input_size_e = input_size_e  # input size
         self.input_size_d = input_size_d  # input size
         self.layers_e = layers_e
         self.layers_d = layers_d
+        self.bidir_e = bidir_e
 
         self.hidden_size_lstm = hidden_size_lstm  # hidden state
 
@@ -162,12 +174,18 @@ class LSTM_ED_Attention(torch.nn.Module):
         #self.nn_fut = torch.nn.Linear(in_features = input_size_fut_t)
 
         self.lstm_e = torch.nn.LSTM(input_size=input_size_e, hidden_size=hidden_size_lstm, num_layers=layers_e,
-                                    batch_first=True,bidirectional=False).to(dev)  # Encoder
+                                    batch_first=True,bidirectional=bidir_e).to(dev)  # Encoder
         self.lstm_d = torch.nn.LSTM(input_size=input_size_d+hidden_size_lstm, hidden_size=hidden_size_lstm, num_layers=layers_d,
                                     batch_first=True,bidirectional=False).to(dev)  # Decoder
         self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev) # fully connected 1
 
         self.attn = AttentionModule(hidden_size_lstm,dev)
+
+        if bidir_e:
+            self.mul_bidir_e = 2
+        else:
+            self.mul_bidir_e = 1
+
 
     def forward(self, list_data,dev_type='NA'):
         x_e = list_data[0]
@@ -178,10 +196,14 @@ class LSTM_ED_Attention(torch.nn.Module):
         else:
             dev = dev_type
 
-        h_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
-        c_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
+        h_0 = Variable(torch.zeros(self.layers_e * self.mul_bidir_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
+        c_0 = Variable(torch.zeros(self.layers_e * self.mul_bidir_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
         # Propagate input through LSTM
         output_e, (h_e, c_e) = self.lstm_e(x_e, (h_0, c_0))  # lstm with input, hidden, and internal state
+
+        if self.bidir_e:
+            output_e = self.aggregate_bidirectional(tensors=output_e,dim=2)
+            h_e,c_e = self.aggregate_bidirectional(tensors=[h_e,c_e],dim=0)
 
         output_d = []
 
@@ -192,7 +214,7 @@ class LSTM_ED_Attention(torch.nn.Module):
 
             # Expand h_e[-1] to match the sequence length of output_e
             h_e_expanded = h_e[-1].unsqueeze(1).repeat(1, output_e.size(1),
-                                                       1)  # Shape: (batch_size, seq_length_e, hidden_size_lstm)
+                                                       1) # Shape: (batch_size, seq_length_e, hidden_size_lstm)
 
             # Compute attention weights
             attn_weights = self.attn(h_e_expanded, output_e)
@@ -214,6 +236,22 @@ class LSTM_ED_Attention(torch.nn.Module):
         out = torch.squeeze(self.fc(stacked_output))
 
         return out
+
+    def aggregate_bidirectional(self, tensors,dim):
+
+        def aggregate_tensor(t,dim):
+            t_1, t_2 = torch.split(t, int(t.shape[dim] / 2), dim)
+            t_agg = (t_1 + t_2) / 2
+            return t_agg
+
+        if isinstance(tensors,list):
+            aggregated_tensors = []
+            for t in tensors:
+                aggregated_tensors.append(aggregate_tensor(t,dim))
+            return aggregated_tensors
+        else:
+            return aggregate_tensor(tensors,dim)
+
 
     def set_device(self,dev):
         self.dev = dev
