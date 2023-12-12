@@ -12,6 +12,8 @@ import os
 
 if __name__ == '__main__':
 
+    makedir = False
+
     idd = {
         'data_file_loc': "../data_preprocessing/data_scaled.h5",
         'read_cols_past_ctxt': ['SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc'],
@@ -20,7 +22,7 @@ if __name__ == '__main__':
         'target_col': 'SI', #Before: "Frame_SI_norm"
         'datetime_from': datetime(2019,9,1,0,0,0),
         'datetime_to': datetime(2023,9,1,0,0,0),
-        'batch_size': 16,
+        'batch_size': 63,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [5/7,1/7,1/7],
         'lookahead': 12,
@@ -30,11 +32,12 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         #'n_configs': 3, #Number of HP configurations
-        'store_code': '20231206_2',
+        'store_code': '20231211_attention_bidirectional',
         'epochs': 100,
         'patience': 10,
         'loc_scaler': "../scaling/Scaling_values.xlsx",
-        "unscale_labels":True
+        "unscale_labels":True,
+        'forecaster_type': 'ED_RNN_att' # 'ED_RNN' or 'ED_RNN_att'
     }
 
     #scaler = scaling.Scaler(idd['loc_scaler'])
@@ -74,9 +77,9 @@ if __name__ == '__main__':
 
     hp_dict = {
         'input_size_e': [ise], #not a hyperparameter?
-        'hidden_size_lstm': [32,64],
-        'layers_lstm': [1,2],
-        'lr': [0.001,0.005,0.0005,0.0001],
+        'hidden_size_lstm': [64,32],
+        'layers_lstm': [1],
+        'lr': [0.001,0.005,0.0005],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         'input_size_d': [isd], #not a hyperparameter?
         #'input_size_past_t': [1 for i in range(idd['n_configs'])],  # TODO: not doing anything right now? Check
@@ -89,7 +92,8 @@ if __name__ == '__main__':
     la = idd['lookahead']
     store_code = idd['store_code']
     dir = f'output/trained_models/LA_{la}/{store_code}/'
-    os.mkdir(dir)
+    if makedir:
+        os.mkdir(dir)
 
     #ft.hp_tuning(dict=idd,dict_HPs=hp_dict,list_arrays=list_arrays)
     list_output_dict = ft.run_training(dict_params=idd,dict_HPs=hp_dict,list_arrays=list_arrays)

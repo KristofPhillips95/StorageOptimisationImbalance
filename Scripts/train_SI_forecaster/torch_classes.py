@@ -113,125 +113,151 @@ class LSTM_ED(torch.nn.Module):
 """
 Bi-directional RNNs with attention by chatgpt
 """
+
+class LSTMLayerNorm(torch.nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(LSTMLayerNorm, self).__init__()
+        self.lstm = torch.nn.LSTM(input_size, hidden_size)
+        self.layer_norm = torch.nn.LayerNorm(hidden_size)
+
+    def forward(self, x):
+        output, (hidden, cell) = self.lstm(x)
+        # Apply Layer Normalization to the output of LSTM
+        output = self.layer_norm(output)
+        return output, (hidden, cell)
+
 class AttentionModule(torch.nn.Module):
-    """
-    Implements the attention mechanism.
-    """
-    def __init__(self, hidden_size_lstm):
-        """
-        Args:
-            hidden_size_lstm (int): Size of the LSTM hidden state.
-        """
+    def __init__(self, hidden_size_lstm,dev):
         super(AttentionModule, self).__init__()
-        self.attn = torch.nn.Linear(2*hidden_size_lstm + hidden_size_lstm, hidden_size_lstm)
-        self.v = torch.nn.Parameter(torch.rand(hidden_size_lstm))
+        self.attn = torch.nn.Linear(2 * hidden_size_lstm, hidden_size_lstm).to(dev)
+        self.v = torch.nn.Parameter(torch.rand(hidden_size_lstm)).to(dev)
 
     def forward(self, hidden, encoder_outputs):
-        """
-        Forward propagate the attention mechanism.
+        # hidden shape: (batch_size, hidden_size_lstm)
+        # encoder_outputs shape: (batch_size, seq_length_e, hidden_size_lstm)
 
-        Args:
-            hidden (Tensor): The previous hidden state of the decoder LSTM.
-            encoder_outputs (Tensor): The output sequences from the encoder LSTM.
+        # Expand hidden to match the sequence length of encoder_outputs
+        #hidden_expanded = hidden.unsqueeze(1).repeat(1, encoder_outputs.size(1), 1)
+        # hidden_expanded shape: (batch_size, seq_length_e, hidden_size_lstm)
 
-        Returns:
-            Tensor: Attention weights.
-        """
-        # Calculate attention weights (energies)
-        attn_energies = self.score(hidden, encoder_outputs)
-        attn_energies = attn_energies.t().unsqueeze(1)
+        # Calculate energies
+        energy = torch.tanh(self.attn(torch.cat((hidden, encoder_outputs), dim=2)))
+        # energy shape: (batch_size, seq_length_e, hidden_size_lstm)
 
-        return F.softmax(attn_energies, dim=2)
+        energy = energy.transpose(1, 2)  # (batch_size, hidden_size_lstm, seq_length_e)
+        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)  # (batch_size, 1, hidden_size_lstm)
 
-    def score(self, hidden, encoder_outputs):
-        """
-        Compute attention scores.
+        # Calculate attention scores
+        attn_scores = torch.bmm(v, energy).squeeze(1)  # (batch_size, seq_length_e)
+        attn_weights = F.softmax(attn_scores, dim=1)  # (batch_size, seq_length_e)
 
-        Args:
-            hidden (Tensor): The previous hidden state of the decoder LSTM.
-            encoder_outputs (Tensor): The output sequences from the encoder LSTM.
+        return attn_weights
 
-        Returns:
-            Tensor: Attention scores.
-        """
-        energy = self.attn(torch.cat((hidden.repeat(encoder_outputs.size(0), 1, 1), encoder_outputs), 2))
-        energy = energy.transpose(1, 2)
-        v = self.v.repeat(encoder_outputs.size(0), 1).unsqueeze(1)
-        energy = torch.bmm(v, energy)
-        return energy.squeeze(1)
 
 class LSTM_ED_Attention(torch.nn.Module):
-    """
-    LSTM-based Encoder-Decoder model with Attention mechanism.
-    """
-    def __init__(self, input_size_e, hidden_size_lstm, input_size_d, output_dim, dev):
-        """
-        Args:
-            input_size_e (int): Feature dimension of input data for the encoder.
-            hidden_size_lstm (int): Size of the LSTM hidden state.
-            input_size_d (int): Feature dimension of input data for the decoder.
-            output_dim (int): Dimensionality of the model output.
-            dev (str): Device to deploy the model to ('cpu' or 'cuda').
-        """
+    def __init__(self, input_size_e,layers_e, hidden_size_lstm, input_size_d,layers_d,output_dim,bidir_e=True,dev='cuda'):
         super(LSTM_ED_Attention, self).__init__()
+        self.input_size_e = input_size_e  # input size
+        self.input_size_d = input_size_d  # input size
+        self.layers_e = layers_e
+        self.layers_d = layers_d
+        self.bidir_e = bidir_e
 
-        # Bidirectional LSTM for the encoder
-        self.lstm_e = torch.nn.LSTM(input_size=input_size_e, hidden_size=hidden_size_lstm, num_layers=1,
-                                    batch_first=True, bidirectional=True).to(dev)
+        self.hidden_size_lstm = hidden_size_lstm  # hidden state
 
-        # Attention mechanism
-        self.attn = AttentionModule(hidden_size_lstm)
+        self.output_dim = output_dim
 
-        # LSTM for the decoder
-        self.lstm_d = torch.nn.LSTM(input_size=input_size_d + 2*hidden_size_lstm, hidden_size=hidden_size_lstm,
-                                    num_layers=1, batch_first=True, bidirectional=False).to(dev)
 
-        # Fully connected layer for the final output
-        self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev)
+        self.dev = dev
 
-    def forward(self, list_data, dev_type='NA'):
-        """
-        Forward propagate the model.
+        #self.nn_past = torch.nn.Linear(in_features = input_size_past_t, output_features = hidden_size_lstm)
+        #self.nn_fut = torch.nn.Linear(in_features = input_size_fut_t)
 
-        Args:
-            list_data (list): A list containing encoder and decoder input data.
-            dev_type (str, optional): Device type, if different from initialized device. Defaults to 'NA'.
+        self.lstm_e = torch.nn.LSTM(input_size=input_size_e, hidden_size=hidden_size_lstm, num_layers=layers_e,
+                                    batch_first=True,bidirectional=bidir_e).to(dev)  # Encoder
+        self.lstm_d = torch.nn.LSTM(input_size=input_size_d+hidden_size_lstm, hidden_size=hidden_size_lstm, num_layers=layers_d,
+                                    batch_first=True,bidirectional=False).to(dev)  # Decoder
+        self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev) # fully connected 1
 
-        Returns:
-            Tensor: Model's output predictions.
-        """
-        x_e = list_data[0]  # Encoder input
-        x_d = list_data[1]  # Decoder input
+        self.attn = AttentionModule(hidden_size_lstm,dev)
 
-        # Determine device type
+        if bidir_e:
+            self.mul_bidir_e = 2
+        else:
+            self.mul_bidir_e = 1
+
+
+    def forward(self, list_data,dev_type='NA'):
+        x_e = list_data[0]
+        x_d = list_data[1]
+
         if dev_type == 'NA':
             dev = self.dev
         else:
             dev = dev_type
 
-        # Initialize hidden and cell states for the encoder LSTM
-        h_0 = Variable(torch.zeros(2, x_e.size(0), self.hidden_size_lstm)).to(dev)  # 2 for bidirectionality
-        c_0 = Variable(torch.zeros(2, x_e.size(0), self.hidden_size_lstm)).to(dev)
+        h_0 = Variable(torch.zeros(self.layers_e * self.mul_bidir_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
+        c_0 = Variable(torch.zeros(self.layers_e * self.mul_bidir_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
+        # Propagate input through LSTM
+        output_e, (h_e, c_e) = self.lstm_e(x_e, (h_0, c_0))  # lstm with input, hidden, and internal state
 
-        # Pass encoder input through bidirectional LSTM
-        output_e, (h_e, c_e) = self.lstm_e(x_e, (h_0, c_0))
+        if self.bidir_e:
+            output_e = self.aggregate_bidirectional(tensors=output_e,dim=2)
+            h_e,c_e = self.aggregate_bidirectional(tensors=[h_e,c_e],dim=0)
 
-        # Combine bidirectional LSTM outputs
-        output_e = (output_e[:, :, :self.hidden_size_lstm] + output_e[:, :, self.hidden_size_lstm:])
+        output_d = []
 
-        # Compute attention weights and get context
-        attn_weights = self.attn(h_e[-1], output_e)
-        context = attn_weights.bmm(output_e.transpose(0, 1))
+        for t in range(x_d.size(1)):
+            input_d_step = x_d[:,t,:]
+            # Reshape input_d_step for seq_len=1
+            input_d_step = input_d_step.unsqueeze(1)  # Shape: (batch_size, 1, input_size_d + hidden_size_lstm)
 
-        # Concatenate context to decoder input
-        x_d = torch.cat((x_d, context.transpose(0, 1)), 2)
+            # Expand h_e[-1] to match the sequence length of output_e
+            h_e_expanded = h_e[-1].unsqueeze(1).repeat(1, output_e.size(1),
+                                                       1) # Shape: (batch_size, seq_length_e, hidden_size_lstm)
 
-        # Pass decoder input through LSTM
-        output_d, _ = self.lstm_d(x_d, (h_e.view(1, h_e.size(1), -1), c_e.view(1, c_e.size(1), -1)))
+            # Compute attention weights
+            attn_weights = self.attn(h_e_expanded, output_e)
 
-        out = torch.squeeze(self.fc(output_d))
+            # Compute context vector
+            context = attn_weights.unsqueeze(1).bmm(output_e).squeeze(1)  # Shape: (batch_size, hidden_size_lstm)
+
+            # Concatenate context vector with input_d_step
+            input_d_step = torch.cat((input_d_step.squeeze(1), context),
+                                     dim=1)  # Shape: (batch_size, input_size_d + 2 * hidden_size_lstm)
+
+            # Pass the concatenated vector to the LSTM
+            output_d_step, (h_e, c_e) = self.lstm_d(input_d_step.unsqueeze(1), (h_e, c_e))
+
+            # Collect outputs
+            output_d.append(output_d_step.squeeze(1))
+
+        stacked_output = torch.stack(output_d,dim=1)
+        out = torch.squeeze(self.fc(stacked_output))
+
         return out
 
+    def aggregate_bidirectional(self, tensors,dim):
+
+        def aggregate_tensor(t,dim):
+            t_1, t_2 = torch.split(t, int(t.shape[dim] / 2), dim)
+            t_agg = (t_1 + t_2) / 2
+            return t_agg
+
+        if isinstance(tensors,list):
+            aggregated_tensors = []
+            for t in tensors:
+                aggregated_tensors.append(aggregate_tensor(t,dim))
+            return aggregated_tensors
+        else:
+            return aggregate_tensor(tensors,dim)
+
+
+    def set_device(self,dev):
+        self.dev = dev
+        self.lstm_e.to(dev)
+        self.lstm_d.to(dev)
+        self.fc.to(dev)
 
 """
 Transformer class, as produced by chatgpt
