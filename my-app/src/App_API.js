@@ -1,28 +1,37 @@
 
 import React, { useState, useEffect } from 'react';
-import { renderProfitTable } from './RenderProfitTable';
+import { RenderProfitTable } from './RenderProfitTable';
 import { prepareChargeChart } from './PrepareChargeChartData';
 import { prepareChart } from './ChartDataFunctions';
 
+function fetchData(link) {
+  return fetch(link)
+  .then(response=> response.json())
+  .catch(error=> {
+    console.error(error);
+    throw error
+   }
+  )
+}
+
+function useDataEffect(endpoint, setData) {
+  useEffect(() => {
+    fetchData(endpoint)
+      .then(json => setData(json))
+      .catch(error => console.error(error));
+  }, [endpoint, setData]);
+}
+
 function App_API() {
-  console.log("Entered APP_API")
+  // console.log("Entered APP_API")
     const [data, setData] = useState(null);
+    const [data_lts, setData_lts] = useState(null);
   
-    useEffect(() => {
-      fetch("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items")
-        .then(response => response.json())
-        .then(json => {
-          // console.log(json); // Check the fetched data
-          setData(json);
-        })
-        .catch(error => console.error(error));
-    }, []);
-      // Check if data is not yet available
-  if (data === null) {
-    return <div>Loading...</div>;
-  }
 
-
+    useDataEffect("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items", setData);
+    useDataEffect("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/lts_items", setData_lts);
+    console.log(data_lts)
+    
   const imba_chart_2 = prepareChart(data,"Imba")
   const price_chart_2 = prepareChart(data,"Price")
   const charge_chart = prepareChargeChart(data)
@@ -37,60 +46,21 @@ function App_API() {
     ];
   
 
-  
+    if (data === null) {
+      return <div>Loading...</div>;
+    }
     return (
       <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
         <div style={{ marginRight: '20px' }}>
-          {data ? (
-            <div style={{ width: '600px', height: '300px', margin: '10px' }}>
-              {imba_chart_2}
-            </div>
-          ) : (
-            'Loading...'
-          )}
-          {data ? (
-            <div style={{ width: '600px', height: '300px', margin: '10px' }}>
-              {price_chart_2}
-            </div>
-          ) : (
-            'Loading...'
-          )}
-  
-          {data ? (
-            <div style={{ width: '600px', height: '300px', margin: '10px' }}>
-              {charge_chart}
-            </div>
-          ) : (
-            'Loading...'
-          )}
+          <div style={{ width: '600px', height: '300px', margin: '10px' }}>{imba_chart_2}</div>
+          <div style={{ width: '600px', height: '300px', margin: '10px' }}>{price_chart_2}</div>
+          <div style={{ width: '600px', height: '300px', margin: '10px' }}>{charge_chart}</div>
         </div>
-  
         <div style={{ width: '600px', height: '300px', margin: '10px' }}>
-          {renderProfitTable(values)}
+          {RenderProfitTable(values,data_lts)}
         </div>
       </div>
     );
   }
-    
 
-
-    
-    // const options = {
-    //   scales: {
-    //     y: {
-    //       beginAtZero: true,
-    //     },
-    //   },
-    //   plugins: {
-    //     legend: {
-    //       labels: {
-    //         display: false
-    //       },
-    //     },
-    //   },
-    // };
-  
-
-
-  
 export default App_API;
