@@ -13,7 +13,7 @@ def create_data_lts(new_known_time,new_known_price,stored_items,writing_time):
         "soc": stored_items[new_known_time]["soc"],
         "charge": stored_items[new_known_time]["charge"],
         "discharge": stored_items[new_known_time]["discharge"],
-        "Imbalance price":new_known_price,
+        "Price":new_known_price,
     }
     return data_lts
 
