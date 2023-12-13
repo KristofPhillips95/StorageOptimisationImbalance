@@ -23,7 +23,7 @@ export function prepareChargeChartData(data){
     const soc_known = knownElements.map(element => element.soc[0]);
 
     const labels = [...past_times_known,...past_times_unknown,...future_times]
-    console.log(knownElements)
+    // console.log(knownElements)
     return {
       labels,
       datasets: [
@@ -64,7 +64,7 @@ export function prepareChargeChartData(data){
     };
   };
 function prepareChargeChartOptions() {
-  console.log("Preparing charge chart options");
+  // console.log("Preparing charge chart options");
 
   return {
     plugins: {

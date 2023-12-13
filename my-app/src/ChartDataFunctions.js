@@ -1,7 +1,7 @@
 import { Line } from 'react-chartjs-2';
 
 export function prepareChart(data,type) {
-    console.log("Preparing chart")
+    // console.log("Preparing chart")
     const chart_data = prepareChartData(data,type);
     let title
     let ylabel
