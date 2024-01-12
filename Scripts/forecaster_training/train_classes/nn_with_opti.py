@@ -12,7 +12,7 @@ import random
 
 import sys
 sys.path.insert(0,"../../ML_proxy/")
-from model import Storage_model
+#from model import Storage_model
 
 
 class Forecaster():

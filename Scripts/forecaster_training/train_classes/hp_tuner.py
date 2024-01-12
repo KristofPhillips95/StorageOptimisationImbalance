@@ -11,13 +11,12 @@ from concurrent.futures import ProcessPoolExecutor
 #TODO: clean up how data is handled
 
 class HPTuner():
-    def __init__(self, strat, hp_dict, hp_trans, nn_params, OP_params, training_params, data_params, save_loc,  data=None, n_configs=None):
+    def __init__(self, hp_dict, hp_trans, nn_params, OP_params, training_params, data_params, save_loc,  data=None, n_configs=None):
         super(HPTuner,self).__init__()
 
-        self.strat = strat
         self.hp_dict = hp_dict
-        assert(set(hp_dict.keys()).issubset(hp_trans.keys())), "The keys of hp_dict should be a subset of the keys of hp_trans"
         self.hp_trans = hp_trans
+        self.init_strategy()
         self.nn_params = nn_params
         self.OP_params = OP_params
         self.training_params = training_params
@@ -60,7 +59,7 @@ class HPTuner():
     def execute_training(self, exec_type):
         if exec_type == 'seq':
             for i, model in enumerate(self.list_models):
-                self.list_models[i] = train_single_model(model, self.print_new_config, self.save_loc)
+                self.list_models[i] = train_single_model(model, self.print_new_config, self.save_loc) #TODO: Why isn't this a function of the class?
         elif exec_type == 'par':
             with ProcessPoolExecutor(max_workers=self.training_params['num_cpus']) as executor:
                 trained_models = list(
@@ -69,6 +68,11 @@ class HPTuner():
             self.list_models = trained_models
         else:
             raise ValueError(f"{exec_type} is not a valid type of execution.")
+
+    def init_strategy(self):
+        self.strat = self.hp_dict['strategy']
+        del self.hp_dict['strategy']
+        assert(set(self.hp_dict.keys()).issubset(self.hp_trans.keys())), "The keys of hp_dict should be a subset of the keys of hp_trans"
 
     def initialize_models(self):
         list_models = []
@@ -204,128 +208,3 @@ def train_single_model(model, print_config_func, save_location):
     model.train()
     model.save(save_location)
     return model
-
-if __name__ == "__main__":
-
-    #Data split
-    train_share = 1
-    days_train = math.floor(16/train_share) #64
-    last_ex_test = 19 #59
-    repitition = 1
-
-    factor_size_ESS = 100
-    la=24
-
-    training_dict = {
-        'device': 'cpu',
-        'model_type': "LR",
-        'epochs': 5,
-        'patience': 25,
-        'type_train_labels': 'price_schedule',  # 'price' or 'price_schedule'
-        'sched_type': 'net_discharge', # What type of schedule to use as labels: "net_discharge" or "extended" (latter being stack of d,c,soc)
-        'reg_type': 'quad',  # 'quad' or 'abs',
-        'reg': 1,
-        'batch_size': 64,
-        'lr': 0.001,
-        'loss_fct_str': 'profit', #loss function that will be used to calculate gradients
-        'loss_fcts_eval_str': ['profit', 'mse_sched', 'mse_sched_weighted','mse_price'], #loss functions to be tracked during training procedure
-        'config': 1,
-        'exec': 'seq', #'seq' or 'par'
-        'num_cpus': 2
-    }
-
-    data_dict = {
-        # Dict containing all info required to retrieve and handle data
-        'loc_data': '../../data/processed_data/SPO_DA/',
-        'feat_cols': ["weekday", "NL+FR", "GEN_FC", "y_hat"],
-        'col_label_price': 'y',
-        'col_label_fc_price': 'y_hat',
-        'lookahead': la,
-        'days_train': days_train,
-        'last_ex_test': last_ex_test,
-        'train_share': train_share,
-        'val_split_mode': 'alt_test',
-        # 'separate' for the validation set right before test set, 'alernating' for train/val examples alternating or 'alt_test' for val/test examples alternating
-        'scale_mode': 'stand',  # 'norm','stand' or 'none'
-        'scale_base': 'y_hat',  # False or name of column; best to use in combination with scale_mode = 'stand'
-        'cols_no_centering': ['y_hat'],
-        'scale_price': True,
-    }
-
-    nn_dict = {
-        'list_units': [],
-        'list_act': [],
-        'warm_start': False,
-        'input_feat': len(data_dict['feat_cols']*la),
-        'output_dim': la,
-    }
-
-    OP_params_dict = {
-    #Dict containing info of optimization program
-        'max_charge': 0.01 * factor_size_ESS,
-        'max_discharge': 0.01 * factor_size_ESS,
-        'eff_d': 0.95,
-        'eff_c': 0.95,
-        'max_soc': 0.04 * factor_size_ESS,
-        'min_soc': 0,
-        'soc_0': 0.02 * factor_size_ESS,
-        'ts_len': 1,
-        'opti_type': 'exo',
-        'opti_package': 'scipy',
-        'lookahead': la,
-        'soc_update': False,
-        'cyclic_bc': False,
-        'combined_c_d_max': False, #If True, c+d<= P_max; if False: c<=P_max; d<= P_max
-        'degradation': False,
-        'inv_cost': 0,
-        'lookback': 0,
-        'quantiles_FC_SI': [0.01, 0.05],
-        'col_SI': 1,
-        'perturbation': 0.2,
-        'feat_cols': data_dict['feat_cols'],
-        'restrict_forecaster_ts': True,
-        'n_diff_features': len(data_dict['feat_cols']),
-        'gamma': 1,
-        'smoothing': 'quadratic'  # 'quadratic' or 'logBar'
-    }
-
-    dict_hps = {
-        #Dictionary of hyperparameters (which are the keys) where the list are the allowed values the HP can take
-        'reg': [0.0],  # [0,0.01],
-        'batches': [64],  # [8,64],
-        'gamma': [0,10],  # [0.1,0.3,1,3,10],
-        'lr': [0.001],  # [0.000005,0.00005],
-        'loss_fct_str': ['mse_sched_weighted'],  # 'profit', 'mse_sched' or 'mse_sched_weighted'
-        'smoothing': ['logBar'],  # 'logBar' or 'quadratic'
-        'framework': ["ID"], # "ID" (Implicit Differentiation) or "GS" (Gradient Smoothing) or "GS_proxy" (Gradient smoothing with proxy for mu calculation)
-        'list_units': [[]],
-        'list_act': [[]] #[['softplus']]
-    }
-
-    hp_trans = {
-        #Dictionary accompanying dict_hps and assigning the HPs to a specific state dictionary in a Train_model object
-        'reg': 'nn',
-        'batches': 'train',
-        'gamma': 'OP_params',
-        'lr': 'train',
-        'loss_fct_str': 'train',
-        'smoothing': 'OP_params',
-        'framework': 'nn',
-        'list_units': 'nn',
-        'list_act': 'nn'
-    }
-
-
-    strat = "grid_search"
-    save_loc = "../train_output/20231213_test7/"
-
-    hp_tuner = HPTuner(strat=strat,
-                       hp_dict=dict_hps,
-                       hp_trans=hp_trans,
-                       nn_params=nn_dict,
-                       training_params=training_dict,
-                       OP_params=OP_params_dict,
-                       data_params=data_dict,
-                       save_loc=save_loc)
-    hp_tuner()
-

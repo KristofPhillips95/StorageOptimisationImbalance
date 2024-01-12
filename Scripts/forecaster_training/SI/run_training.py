@@ -7,12 +7,15 @@ import torch
 current_dir = os.path.dirname(os.path.abspath(__file__))
 old_dir = os.path.join(current_dir,'..','..','train_SI_forecaster')
 dir_scaling = os.path.join(old_dir,'..','scaling')
+dir_classes = os.path.join(current_dir,'..','train_classes')
 sys.path.insert(0,old_dir)
 sys.path.insert(0,dir_scaling)
+sys.path.insert(0,dir_classes)
 
 import scaling
 import functions_train as ft
 import functions_data_preprocessing as fdp
+from hp_tuner import HPTuner
 
 
 
@@ -22,7 +25,9 @@ import functions_data_preprocessing as fdp
 
 if __name__ == '__main__':
 
-    makedir = False
+
+    la = 12
+    lb = 8
 
     data_dict = {
         'data_file_loc': "../../data_preprocessing/data_scaled.h5",
@@ -35,11 +40,10 @@ if __name__ == '__main__':
         #'batch_size': 63,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [3/5,1/5,1/5],
-        'lookahead': 12,
-        'lookback': 8,
-        'dev': 'cuda',
-        'n_components_feat':2, #number of input tensors to neural network for forward pass
-        'n_components_lab': 1, #number of input tensors for loss function calc
+        'lookahead': la,
+        'lookback': lb,
+        #'n_components_feat':2, #number of input tensors to neural network for forward pass
+        #'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         #'store_code': '20231211_attention_bidirectional',
         #'epochs': 100,
@@ -79,26 +83,71 @@ if __name__ == '__main__':
                  [torch.squeeze(torch.from_numpy(l).to(torch.float32)) for l in lab_test]),
     }
 
-
-    ##### TO DO: write function to create hp list dict #####
-    ise = array_ext_past.shape[2]
-    isd = array_ext_fut.shape[2]
-
     OP_params_dict = {}
 
-    hp_dict = {
-        'input_size_e': [ise], #not a hyperparameter?
+    dict_hps = {
         'hidden_size_lstm': [64,32],
         'layers_lstm': [1],
         'lr': [0.001,0.005,0.0005],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
-        'input_size_d': [isd], #not a hyperparameter?
-        #'input_size_past_t': [1 for i in range(idd['n_configs'])],  # TODO: not doing anything right now? Check
-        #'input_size_fut_t': [1 for i in range(idd['n_configs'])],  # TODO: not doing anything right now? Check
-        'output_dim': [len(data_dict['list_quantiles'])], #not a hyperparameter?
         #'recurrent_dropout': xyz #Is included in paper Jérémie (?)
         #'gradient_norm': xyz #Also used in paper Jéremie (?)
+        'strategy': 'grid_search',
+        'reg': [0],
     }
+
+    hp_trans = {
+        # Dictionary accompanying dict_hps and assigning the HPs to a specific state dictionary in a Train_model object
+        'reg': 'train',
+        'batches': 'train',
+        'lr': 'train',
+        'loss_fct_str': 'train',
+        'layers_lstm': 'nn',
+        'hidden_size_lstm': 'nn'
+    }
+
+    training_dict = {
+        'device': 'cuda',
+        'num_cpus': 2,
+        'epochs': 1,
+        'patience': 1,
+        'reg_type': 'quad',  # 'quad' or 'abs',
+        'batch_size': 64,
+        'loss_fct_str': 'pinball',  # loss function that will be used to calculate gradients
+        'loss_fcts_eval_str': ['pinball'],  # loss functions to be tracked during training procedure
+        'exec': 'seq',  # 'seq' or 'par'
+        'makedir': True,
+    }
+
+    nn_dict = {
+        'type': 'LSTM_ED',  # 'vanilla', 'vanilla_separate', 'RNN_decoder' or 'LSTM_ED'
+        'seq_length_d': la,
+        'seq_length_e': lb,
+        'list_units': [100],  # Vanilla
+        'list_act': ['relu'],  # Vanilla
+        #'input_feat': len(data_dict['feat_cols']) * la,  # Vanilla
+        'warm_start': False,
+        'output_dim': 1,  # Vanilla & RNN_decoder
+        'input_size_e': len(data_dict['read_cols_past_ctxt']) + len(data_dict['cols_temp']) + 1,
+        'input_size_d': len(data_dict['read_cols_past_ctxt']) + len(data_dict['cols_temp']),
+        'layers_d': 1,
+        'layers_e': 1,
+        'hidden_size_lstm': 128,
+        'out_dim_per_neuron': len(data_dict['list_quantiles']),
+        'dev': training_dict['device'],
+    }
+
+    save_loc = "../../train_SI_forecaster/output/trained_models/20240108_test/"
+
+    hp_tuner = HPTuner(hp_dict=dict_hps,
+                       hp_trans=hp_trans,
+                       nn_params=nn_dict,
+                       training_params=training_dict,
+                       OP_params=OP_params_dict,
+                       data_params=data_dict,
+                       save_loc=save_loc,
+                       data=data)
+    hp_tuner()
 
 
 

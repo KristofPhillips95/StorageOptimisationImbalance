@@ -21,7 +21,7 @@ import torch_classes as ct
 import pickle
 import loss_fcts
 import nn_with_opti as nnwo
-import functions_support as sf
+#import functions_support as sf
 
 
 class Train_model():
