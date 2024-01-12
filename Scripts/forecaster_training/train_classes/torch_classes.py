@@ -61,11 +61,12 @@ class Loss_profit(nn.Module):
 
         return -profit
 
-class Loss_smoothing(nn.Module):
+class Loss(nn.Module):
 
-    def __init__(self,obj):
-        super(Loss_smoothing, self).__init__()
+    def __init__(self,obj,params):
+        super(Loss, self).__init__()
         self.obj = obj
+        self.params = params
 
     def forward(self,preds,labels):
 
@@ -73,22 +74,27 @@ class Loss_smoothing(nn.Module):
         + [None]*n adds n times None to the list to ensure it has the minimum required elements for unpacking
         We  only use the first n elements to recover the actual inputs if they are there
         """
-        pred_price, pred_sched = (preds + [None]*2)[:2]
-        act_price,opt_schedules,weights = (labels + [None]*3)[:3]
+        #pred_price, pred_sched = (preds + [None]*2)[:2]
+        #act_price,opt_schedules,weights = (labels + [None]*3)[:3]
 
         if self.obj == "profit":
-            loss = -torch.sum(torch.mul(pred_sched, act_price))
+            loss = -torch.sum(torch.mul(preds[1], labels[0]))
         elif self.obj == "mse_sched":
-            loss = torch.sum(torch.square(pred_sched-opt_schedules))
+            loss = torch.sum(torch.square(preds[1]-labels[1]))
         elif self.obj == "mse_sched_weighted":
-            loss = torch.sum(torch.sum(torch.square(pred_sched-opt_schedules),axis=1)*weights)
+            loss = torch.sum(torch.sum(torch.square(preds[1]-labels[1]),axis=1)*self.params['weights'])
         elif self.obj == "mse_price":
-            loss = torch.mean(torch.square(pred_price-act_price))
+            loss = torch.mean(torch.square(preds[0]-labels[0]))
         elif self.obj == "mae_price":
-            check = pred_price-act_price
-            check = torch.abs(check)
-            check = torch.mean(check)
-            loss = torch.mean(torch.abs(pred_price-act_price))
+            loss = torch.mean(torch.abs(preds[0]-labels[0]))
+        elif self.obj == 'pinball':
+            diff = labels[0] - preds[0]
+            mask_pos = diff >= 0
+            diff_pos = torch.mul(mask_pos, diff)
+            diff_neg = torch.mul(~mask_pos, diff)
+
+            loss = torch.sum(torch.mul(diff_pos, self.params['quantile_tensor']) - torch.mul(diff_neg, 1 - self.params['quantile_tensor']))
+
         else:
             ValueError(f"{self.obj} unsupported loss function")
 

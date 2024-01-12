@@ -115,8 +115,10 @@ if __name__ == '__main__':
         'batch_size': 64,
         'loss_fct_str': 'pinball',  # loss function that will be used to calculate gradients
         'loss_fcts_eval_str': ['pinball'],  # loss functions to be tracked during training procedure
+        'loss_params': {'quantile_tensor': torch.tensor(data_dict['list_quantiles'])},
         'exec': 'seq',  # 'seq' or 'par'
-        'makedir': True,
+        'makedir': False,
+        'framework': 'NA' #Smoothing framework
     }
 
     nn_dict = {

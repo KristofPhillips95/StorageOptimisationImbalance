@@ -142,10 +142,8 @@ class Train_model():
     def set_loss_fct(self):
         l = self.training_params['loss_fct_str']
         self.loss_fct_str = l
-        if l == 'mse':
-            self.loss_fct = torch.nn.MSELoss()
-        elif l in ['profit', 'mse_sched', 'mse_sched_weighted','mse_price','mae_price']:
-            self.loss_fct = ct.Loss_smoothing(l)
+        if l in ['profit', 'mse_sched', 'mse_sched_weighted','mse_price','mae_price','pinball']:
+            self.loss_fct = ct.Loss(l,self.training_params['loss_params'])
         else:
             raise ValueError(f"Loss function {l} not supported")
 
