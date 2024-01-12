@@ -755,7 +755,8 @@ class LSTM_ED_Attention(nn.Module):
         self.hidden_size_lstm = nn_params['hidden_size_lstm']  # hidden state
         self.output_dim = nn_params['output_dim']
         self.dev = nn_params['dev']
-        self.seq_length = nn_params['seq_length']
+        #self.seq_length_e = nn_params['seq_length_e']
+        #self.seq_length_d = nn_params['seq_length_d']
 
         self.lstm_e = nn.LSTM(input_size=self.input_size_e, hidden_size=self.hidden_size_lstm, num_layers=self.layers_e,
                               batch_first=True, bidirectional=False).to(self.dev)  # Encoder

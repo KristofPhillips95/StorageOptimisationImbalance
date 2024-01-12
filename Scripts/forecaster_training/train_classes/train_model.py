@@ -188,7 +188,7 @@ class Train_model():
             self.loss_best = [np.inf,np.inf,np.inf]
             self.loss_evolution[loss_str] = [[], [], []]
             self.loss_evolution_smooth[loss_str] = [[], [], []]
-            self.loss_fcts_eval[loss_str] = ct.Loss_smoothing(loss_str)
+            self.loss_fcts_eval[loss_str] = ct.Loss(loss_str,self.training_params['loss_params'])
 
     def update_best_loss(self,tr,va,te):
         self.loss_best = [tr,va,te]

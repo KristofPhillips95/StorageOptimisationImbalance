@@ -107,12 +107,12 @@ if __name__ == '__main__':
     }
 
     training_dict = {
-        'device': 'cuda',
+        'device': 'cpu',
         'num_cpus': 2,
         'epochs': 1,
         'patience': 1,
         'reg_type': 'quad',  # 'quad' or 'abs',
-        'batch_size': 64,
+        'batch_size': 32,
         'loss_fct_str': 'pinball',  # loss function that will be used to calculate gradients
         'loss_fcts_eval_str': ['pinball'],  # loss functions to be tracked during training procedure
         'loss_params': {'quantile_tensor': torch.tensor(data_dict['list_quantiles'])},
@@ -129,9 +129,9 @@ if __name__ == '__main__':
         'list_act': ['relu'],  # Vanilla
         #'input_feat': len(data_dict['feat_cols']) * la,  # Vanilla
         'warm_start': False,
-        'output_dim': 1,  # Vanilla & RNN_decoder
-        'input_size_e': len(data_dict['read_cols_past_ctxt']) + len(data_dict['cols_temp']) + 1,
-        'input_size_d': len(data_dict['read_cols_past_ctxt']) + len(data_dict['cols_temp']),
+        'output_dim': len(data_dict['list_quantiles']),  # Vanilla & RNN_decoder
+        'input_size_e': len(data_dict['read_cols_past_ctxt']) + len(data_dict['cols_temp']), #number of features per timestep encoder
+        'input_size_d': len(data_dict['read_cols_fut_ctxt']) + len(data_dict['cols_temp']), #number of features per timestep decoder
         'layers_d': 1,
         'layers_e': 1,
         'hidden_size_lstm': 128,
