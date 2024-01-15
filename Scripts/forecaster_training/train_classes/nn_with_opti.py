@@ -31,7 +31,7 @@ class Forecaster():
 
     def __call__(self,x):
         prices = self.nn(x)  # .is_leaf_(True)
-        prices.retain_grad()
+        #prices.retain_grad()
         if self.include_opti:
             schedule = self.diff_sched_calc(prices)
             return [prices,schedule]

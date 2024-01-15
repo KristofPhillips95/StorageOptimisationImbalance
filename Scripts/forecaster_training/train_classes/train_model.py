@@ -221,9 +221,13 @@ class Train_model():
 
         else:
 
-            yhat_train = self.forecaster(self.data['train'][0])
-            yhat_val = self.forecaster(self.data['val'][0])
-            yhat_test = self.forecaster(self.data['test'][0])
+            yhat_train = self.calc_prediction_batched(self.data['train'][0])
+            yhat_val = self.calc_prediction_batched(self.data['val'][0])
+            yhat_test = self.calc_prediction_batched(self.data['test'][0])
+
+            #yhat_train = self.forecaster(self.data['train'][0])
+            #yhat_val = self.forecaster(self.data['val'][0])
+            #yhat_test = self.forecaster(self.data['test'][0])
 
             for loss_str in self.loss_fcts_eval_str:
                 self.loss_evolution[loss_str][0].append(
@@ -348,6 +352,26 @@ class Train_model():
         else:
             self.best_net = torch.load(loc_torch)
         self.forecaster = self.best_net
+
+    def calc_prediction_batched(self,features,bs=1024):
+
+        all_pred = []
+
+        for start in range(0,features[0].shape[0],bs):
+            end = min(start+bs,features[0].shape[0])
+            feats_chunk = [f[start:end,...] for f in features]
+
+            with torch.no_grad():
+                fc = self.forecaster(feats_chunk)
+                all_pred.append(fc)
+
+        output_list = []
+
+        for i in range(len(all_pred[0])):
+            out = torch.cat([f[i] for f in all_pred],dim=0)
+            output_list.append(out)
+
+        return output_list
 
 
 

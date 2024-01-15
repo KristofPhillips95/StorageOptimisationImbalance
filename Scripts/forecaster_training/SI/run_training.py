@@ -79,8 +79,8 @@ if __name__ == '__main__':
 
     dict_hps = {
         'hidden_size_lstm': [32],
-        'layers_lstm': [1],
-        'lr': [0.001,0.005,0.0005],
+        'layers_lstm': [2],
+        'lr': [0.005,0.0005],
         'batch_size': [32],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         #'recurrent_dropout': xyz #Is included in paper Jérémie (?)

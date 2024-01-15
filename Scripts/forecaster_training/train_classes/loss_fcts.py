@@ -44,7 +44,7 @@ class Loss_Smoothed_Schedule(torch.nn.Module):
 
 #Dataset
 class Dataset_Lists(Dataset):
-    def __init__(self, feature_tensors, label_tensors):
+    def __init__(self, feature_tensors, label_tensors=None):
         self.feature_tensors = feature_tensors
         self.label_tensors = label_tensors
         self.length = self._get_min_length()
@@ -52,13 +52,20 @@ class Dataset_Lists(Dataset):
     def _get_min_length(self):
         # Assuming all tensors in each list are of the same length
         feature_lengths = [len(t) for t in self.feature_tensors]
-        label_lengths = [len(t) for t in self.label_tensors]
-        return min(min(feature_lengths), min(label_lengths))
+        if self.label_tensors is None:
+            return feature_lengths
+        else:
+            label_lengths = [len(t) for t in self.label_tensors]
+            return min(min(feature_lengths), min(label_lengths))
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
         sampled_features = [tensor[idx] for tensor in self.feature_tensors]
-        sampled_labels = [tensor[idx] for tensor in self.label_tensors]
-        return sampled_features, sampled_labels
+        if self.label_tensors is None:
+            return sampled_features
+        else:
+            sampled_labels = [tensor[idx] for tensor in self.label_tensors]
+            return sampled_features, sampled_labels
+
