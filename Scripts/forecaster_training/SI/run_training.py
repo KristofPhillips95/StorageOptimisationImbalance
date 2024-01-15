@@ -36,11 +36,11 @@ if __name__ == '__main__':
         'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
-        'datetime_from': datetime(2019,1,1,0,0,0),
-        'datetime_to': datetime(2023,1,1,0,0,0),
+        'datetime_from': datetime(2019,9,1,0,0,0),
+        'datetime_to': datetime(2023,9,1,0,0,0),
         #'batch_size': 63,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
-        'tvt_split': [2/4,1/4,1/4],
+        'tvt_split': [5/7,1/7,1/7],
         'lookahead': la,
         'lookback': lb,
         #'n_components_feat':2, #number of input tensors to neural network for forward pass

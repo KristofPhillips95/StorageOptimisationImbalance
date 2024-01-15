@@ -22,7 +22,7 @@ if __name__ == '__main__':
         'target_col': 'SI', #Before: "Frame_SI_norm"
         'datetime_from': datetime(2019,9,1,0,0,0),
         'datetime_to': datetime(2023,9,1,0,0,0),
-        'batch_size': 63,
+        'batch_size': 32,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [5/7,1/7,1/7],
         'lookahead': 12,

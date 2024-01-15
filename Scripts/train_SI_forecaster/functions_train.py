@@ -126,12 +126,15 @@ def train_forecaster(input_dict):
             # Forward pass
             fc_SI_quant = net(features)
 
+
             loss = loss_fct(labels,fc_SI_quant)
             loss.backward()
 
             # Update weights
             optimizer.step()
             train_loss += loss.item()
+
+
 
         train_time = time.time() - train_start
 

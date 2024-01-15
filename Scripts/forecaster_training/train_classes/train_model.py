@@ -87,41 +87,6 @@ class Train_model():
         train_Dataset = loss_fcts.Dataset_Lists(self.data['train'][0],self.data['train'][1])
         self.training_loader = torch.utils.data.DataLoader(train_Dataset, batch_size=self.training_params['batch_size'], shuffle=True)
 
-    # def init_price_gen(self,nn_params):
-    #     # Function initializing the re-forecaster with a pretrained network if warm start applied
-    #     torch.manual_seed(71)
-    #
-    #     init_net = nnwo.NeuralNet(nn_params=nn_params)
-    #
-    #     if nn_params['warm_start']:
-    #         if nn_params['list_units'] == []:
-    #             idx_fc = self.OP_params['feat_cols'].index('y_hat')
-    #             with torch.no_grad():
-    #                 for i in range(init_net.final_layer.weight.shape[0]):
-    #                     init_net.final_layer.bias[i] = 0
-    #                     for j in range(init_net.final_layer.weight.shape[1]):
-    #                         if j == self.OP_params['n_diff_features'] * i + idx_fc:
-    #                             init_net.final_layer.weight[i, j] = 1
-    #                         else:
-    #                             init_net.final_layer.weight[i, j] = 0
-    #
-    #         else:
-    #
-    #             loc = "../../data/pretrained_fc/model_softplus_wd_nlfr_genfc_yhat_scaled_pos/"
-    #
-    #             weights_layer_1 = torch.tensor(np.load(loc + 'weights_layer_1.npz'), dtype=torch.float32)
-    #             biases_layer_1 = torch.tensor(np.load(loc + 'biases_layer_1.npz'), dtype=torch.float32)
-    #             weights_layer_2 = torch.tensor(np.load(loc + 'weights_layer_2.npz'), dtype=torch.float32)
-    #             biases_layer_2 = torch.tensor(np.load(loc + 'biases_layer_2.npz'), dtype=torch.float32)
-    #
-    #             with torch.no_grad():
-    #                 init_net.hidden_layers[0].weight.copy_(weights_layer_1)
-    #                 init_net.hidden_layers[0].bias.copy_(biases_layer_1)
-    #                 init_net.final_layer.weight.copy_(weights_layer_2)
-    #                 init_net.final_layer.bias.copy_(biases_layer_2)
-    #
-    #     return init_net
-
     def set_optiLayer_RN(self):
         params_RN = copy.deepcopy(self.OP_params)
         params_RN['gamma'] = 0
@@ -255,7 +220,7 @@ class Train_model():
         for e in range(self.training_params['epochs']):
 
             if e%10 == 0:
-                print("Epoch 10 reached")
+                print("Epoch multiple of 10 reached")
 
             if epochs_since_improvement >= self.training_params['patience']:
                 break
@@ -271,14 +236,21 @@ class Train_model():
                 optimizer.zero_grad()
                 # Forward pass
                 y_hat = self.forecaster(x)
-                loss = self.loss_fct(y_hat, y) + self.forecaster.calc_reg()
+                l1 = self.loss_fct(y_hat,y)
+                l2 = self.forecaster.calc_reg()
+                loss = l1+l2
+
+                loss_pure_batch = l1.item()
+                loss_reg_batch = l2.item()
+                loss_pure += loss_pure_batch
+                loss_reg += loss_reg_batch
+                train_loss += loss_pure_batch+loss_reg_batch
+
                 loss.backward()
 
                 # Update weights
                 optimizer.step()
-                train_loss += loss.item()
-                loss_pure += self.loss_fct(y_hat, y).item()
-                loss_reg += self.forecaster.calc_reg().item()
+
 
             train_time = time.time() - train_start
 
