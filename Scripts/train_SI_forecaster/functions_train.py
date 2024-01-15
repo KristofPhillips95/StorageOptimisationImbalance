@@ -34,7 +34,7 @@ def filter_data_list_index(data_list, filter, filter_pos):
         if filter_pos == len(filter) - 1:
             filtered_data = data[filter[filter_pos]:]
         else:
-            filtered_data = data[filter[filter_pos]:filter[filter_pos] + 1]
+            filtered_data = data[filter[filter_pos]:filter[filter_pos+1]]
         return_list.append(filtered_data)
 
     return return_list
@@ -112,6 +112,9 @@ def train_forecaster(input_dict):
         if epochs_since_improvement >= patience:
             break
 
+        if e % 5 == 0:
+            print('multiple of 5')
+
         ### TRAINING PHASE ###
         train_loss = 0.0
         train_start = time.time()
@@ -157,9 +160,9 @@ def train_forecaster(input_dict):
                 fc_SI_quant_test = net(feat_test)
 
                 loss_val = loss_fct(lab_val,fc_SI_quant_val)
-                val_loss += loss_val.item()
+                val_loss += loss_val.item()/input_dict['split_val_test'] #This works because the validation set is split in equally sized parts
                 loss_test = loss_fct(lab_test,fc_SI_quant_test)
-                test_loss += loss_test.item()
+                test_loss += loss_test.item()/input_dict['split_val_test']
 
 
             print(

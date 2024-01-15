@@ -49,6 +49,8 @@ class Forecaster():
         elif nn_params['type'] == 'RNN_M2M':
             self.nn = RNN_M2M(nn_params)
         elif nn_params['type'] == 'LSTM_ED':
+            self.nn = LSTM_ED(nn_params)
+        elif nn_params['type'] == 'LSTM_ED_attn':
             self.nn = LSTM_ED_Attention(nn_params)
         else:
             ValueError(f"{type} is not supported as neural network type")
@@ -700,13 +702,13 @@ class LSTM_ED(torch.nn.Module):
         self.fc = torch.nn.Linear(self.hidden_size_lstm, self.output_dim).to(self.dev) # fully connected 1
 
     def forward(self, list_data,dev_type='NA'):
-        x_e = list_data[0]
-        x_d = list_data[1]
-
         if dev_type == 'NA':
             dev = self.dev
         else:
             dev = dev_type
+
+        x_e = list_data[0].to(dev)
+        x_d = list_data[1].to(dev)
 
         h_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
         c_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
@@ -717,8 +719,6 @@ class LSTM_ED(torch.nn.Module):
         output_d, (h_d, c_d) = self.lstm_d(x_d, (h_e, c_e))
         out = torch.squeeze(self.fc(output_d))  # Final Output
         return out
-
-
 
 
 class Attention(nn.Module):

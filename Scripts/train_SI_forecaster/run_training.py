@@ -32,12 +32,12 @@ if __name__ == '__main__':
         'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
         #'n_configs': 3, #Number of HP configurations
-        'store_code': '20231211_attention_bidirectional',
+        'store_code': '20240115_test',
         'epochs': 100,
         'patience': 10,
         'loc_scaler': "../scaling/Scaling_values.xlsx",
         "unscale_labels":True,
-        'forecaster_type': 'ED_RNN_att' # 'ED_RNN' or 'ED_RNN_att'
+        'forecaster_type': 'ED_RNN' # 'ED_RNN' or 'ED_RNN_att'
     }
 
     #scaler = scaling.Scaler(idd['loc_scaler'])
@@ -77,9 +77,9 @@ if __name__ == '__main__':
 
     hp_dict = {
         'input_size_e': [ise], #not a hyperparameter?
-        'hidden_size_lstm': [64,32],
-        'layers_lstm': [1],
-        'lr': [0.001,0.005,0.0005],
+        'hidden_size_lstm': [32],
+        'layers_lstm': [2],
+        'lr': [0.005],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         'input_size_d': [isd], #not a hyperparameter?
         #'input_size_past_t': [1 for i in range(idd['n_configs'])],  # TODO: not doing anything right now? Check

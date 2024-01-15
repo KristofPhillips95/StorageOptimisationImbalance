@@ -28,6 +28,7 @@ if __name__ == '__main__':
 
     la = 12
     lb = 8
+    dev = 'cuda'
 
     data_dict = {
         'data_file_loc': "../../data_preprocessing/data_scaled.h5",
@@ -35,11 +36,11 @@ if __name__ == '__main__':
         'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
-        'datetime_from': datetime(2017,1,1,0,0,0),
-        'datetime_to': datetime(2022,1,1,0,0,0),
+        'datetime_from': datetime(2019,1,1,0,0,0),
+        'datetime_to': datetime(2023,1,1,0,0,0),
         #'batch_size': 63,
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
-        'tvt_split': [3/5,1/5,1/5],
+        'tvt_split': [2/4,1/4,1/4],
         'lookahead': la,
         'lookback': lb,
         #'n_components_feat':2, #number of input tensors to neural network for forward pass
@@ -74,21 +75,13 @@ if __name__ == '__main__':
     lab_train,lab_val,lab_test = fdp.get_train_val_test_arrays([labels_ext],data_dict)
     #list_arrays = [feat_train,lab_train,feat_val,lab_val,feat_test,lab_test]
 
-    data = {
-        'train': ([torch.from_numpy(f).to(torch.float32) for f in feat_train],
-                  [torch.squeeze(torch.from_numpy(l).to(torch.float32)) for l in lab_train]),
-        'val': ([torch.from_numpy(f).to(torch.float32) for f in feat_val],
-                [torch.squeeze(torch.from_numpy(l).to(torch.float32)) for l in lab_val]),
-        'test': ([torch.from_numpy(f).to(torch.float32) for f in feat_test],
-                 [torch.squeeze(torch.from_numpy(l).to(torch.float32)) for l in lab_test]),
-    }
-
     OP_params_dict = {}
 
     dict_hps = {
-        'hidden_size_lstm': [64,32],
+        'hidden_size_lstm': [32],
         'layers_lstm': [1],
         'lr': [0.001,0.005,0.0005],
+        'batch_size': [32],
         #'batch_size': [32,64,128], Not included here, defined in the larger stuff
         #'recurrent_dropout': xyz #Is included in paper Jérémie (?)
         #'gradient_norm': xyz #Also used in paper Jéremie (?)
@@ -99,7 +92,7 @@ if __name__ == '__main__':
     hp_trans = {
         # Dictionary accompanying dict_hps and assigning the HPs to a specific state dictionary in a Train_model object
         'reg': 'train',
-        'batches': 'train',
+        'batch_size': 'train',
         'lr': 'train',
         'loss_fct_str': 'train',
         'layers_lstm': 'nn',
@@ -107,15 +100,14 @@ if __name__ == '__main__':
     }
 
     training_dict = {
-        'device': 'cpu',
-        'num_cpus': 2,
-        'epochs': 1,
-        'patience': 1,
+        'device': dev,
+        #'num_cpus': 2,
+        'epochs': 30,
+        'patience': 10,
         'reg_type': 'quad',  # 'quad' or 'abs',
-        'batch_size': 32,
         'loss_fct_str': 'pinball',  # loss function that will be used to calculate gradients
         'loss_fcts_eval_str': ['pinball'],  # loss functions to be tracked during training procedure
-        'loss_params': {'quantile_tensor': torch.tensor(data_dict['list_quantiles'])},
+        'loss_params': {'quantile_tensor': torch.tensor(data_dict['list_quantiles']).to(dev)},
         'exec': 'seq',  # 'seq' or 'par'
         'makedir': False,
         'framework': 'NA' #Smoothing framework
@@ -125,21 +117,30 @@ if __name__ == '__main__':
         'type': 'LSTM_ED',  # 'vanilla', 'vanilla_separate', 'RNN_decoder' or 'LSTM_ED'
         'seq_length_d': la,
         'seq_length_e': lb,
-        'list_units': [100],  # Vanilla
+        'list_units': [18],  # Vanilla
         'list_act': ['relu'],  # Vanilla
         #'input_feat': len(data_dict['feat_cols']) * la,  # Vanilla
         'warm_start': False,
         'output_dim': len(data_dict['list_quantiles']),  # Vanilla & RNN_decoder
         'input_size_e': len(data_dict['read_cols_past_ctxt']) + len(data_dict['cols_temp']), #number of features per timestep encoder
         'input_size_d': len(data_dict['read_cols_fut_ctxt']) + len(data_dict['cols_temp']), #number of features per timestep decoder
-        'layers_d': 1,
-        'layers_e': 1,
-        'hidden_size_lstm': 128,
+        'layers_d': 2,
+        'layers_e': 2,
+        'hidden_size_lstm': 32,
         'out_dim_per_neuron': len(data_dict['list_quantiles']),
-        'dev': training_dict['device'],
+        'dev': dev,
     }
 
     save_loc = "../../train_SI_forecaster/output/trained_models/20240108_test/"
+
+    data = {
+        'train': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_train],
+                  [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_train]),
+        'val': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_val],
+                [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_val]),
+        'test': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_test],
+                 [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_test]),
+    }
 
     hp_tuner = HPTuner(hp_dict=dict_hps,
                        hp_trans=hp_trans,

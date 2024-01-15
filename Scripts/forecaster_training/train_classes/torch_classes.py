@@ -92,8 +92,13 @@ class Loss(nn.Module):
             mask_pos = diff >= 0
             diff_pos = torch.mul(mask_pos, diff)
             diff_neg = torch.mul(~mask_pos, diff)
+            pinball_pos = torch.mul(diff_pos, self.params['quantile_tensor'])
+            pinball_neg = torch.mul(diff_neg, 1 - self.params['quantile_tensor'])
 
-            loss = torch.sum(torch.mul(diff_pos, self.params['quantile_tensor']) - torch.mul(diff_neg, 1 - self.params['quantile_tensor']))
+            loss = torch.mean(torch.sum(pinball_pos - pinball_neg,axis=2))
+
+
+
 
         else:
             ValueError(f"{self.obj} unsupported loss function")

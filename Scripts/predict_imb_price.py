@@ -468,7 +468,7 @@ def call_prediction(soc_0):
         'eff_c': 0.95,
         'max_soc': 4,
         'min_soc': 0,
-        'ts_len': 1,
+        'ts_len': 0.25,
         'lookahead': la,
         'cyclic_bc': True,
         'combined_c_d_max': True, #If True, c+d<= P_max; if False: c<=P_max; d<= P_max

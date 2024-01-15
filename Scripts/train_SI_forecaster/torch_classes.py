@@ -26,8 +26,11 @@ class Loss_pinball(torch.nn.Module):
         diff_pos = torch.mul(mask_pos,diff)
         diff_neg = torch.mul(~mask_pos,diff)
 
+        loss_pinball_all = torch.mul(diff_pos,self.quantile_tensor) - torch.mul(diff_neg,1-self.quantile_tensor)
 
-        loss = torch.sum(torch.mul(diff_pos,self.quantile_tensor) - torch.mul(diff_neg,1-self.quantile_tensor))
+        loss = torch.mean(torch.sum(loss_pinball_all,axis=2))
+
+        #loss = torch.sum(torch.mul(diff_pos,self.quantile_tensor) - torch.mul(diff_neg,1-self.quantile_tensor))
 
         return loss
 
