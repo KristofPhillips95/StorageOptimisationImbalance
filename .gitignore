@@ -11,3 +11,5 @@ Scripts/train_SI_forecaster/__pycache__/
 Scripts/scaling/__pycache__/
 
 Scripts/optimization/
+
+Scripts/forecaster_training/SI/output/trained_models/
