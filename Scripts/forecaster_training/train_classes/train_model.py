@@ -292,9 +292,7 @@ class Train_model():
         self.nn = None
 
         if not save_data:
-            self.train_data = None
-            self.val_data = None
-            self.test_data = None
+            self.data = None
             self.training_loader = None
 
         if not save_evols:
