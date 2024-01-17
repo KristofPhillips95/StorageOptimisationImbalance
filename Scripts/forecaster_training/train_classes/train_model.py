@@ -220,8 +220,8 @@ class Train_model():
 
         for e in range(self.training_params['epochs']):
 
-            if e%10 == 0:
-                print("Epoch multiple of 10 reached")
+            if e%5 == 0:
+                print("Epoch multiple of 5   reached")
 
             if epochs_since_improvement >= self.training_params['patience']:
                 break

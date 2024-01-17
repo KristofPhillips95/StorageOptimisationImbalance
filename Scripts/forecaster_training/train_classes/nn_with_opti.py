@@ -889,30 +889,35 @@ class ED_Transformer(nn.Module):
 
         self.encoder_seq_length = nn_params['encoder_seq_length']
         self.decoder_seq_length = nn_params['decoder_seq_length']
-        self.decoder_size = nn_params['decoder_size']
+        self.decoder_size = nn_params['encoder_size']
         self.encoder_size = nn_params['encoder_size']
         self.num_heads = nn_params['num_heads']
         self.num_layers = nn_params['num_layers']
         self.ff_dim = nn_params['ff_dim']
         self.dropout = nn_params['dropout']
         self.dev = nn_params['dev']
-        self.output_size = nn_params['output_size']
+        self.output_size = nn_params['output_dim']
+        self.input_size_e = nn_params['input_size_e']
+        self.input_size_d = nn_params['input_size_d']
 
+        #Convert input to right dimension
+        self.fc_input_e = nn.Linear(self.input_size_e, self.encoder_size).to(self.dev)
+        self.fc_input_d = nn.Linear(self.input_size_d, self.decoder_size).to(self.dev)
 
         # Transformer Encoder
-        self.encoder_layers = nn.TransformerEncoderLayer(d_model=self.encoder_size, nhead=self.num_heads, dim_feedforward=self.ff_dim, dropout=self.dropout)
+        self.encoder_layers = nn.TransformerEncoderLayer(d_model=self.encoder_size, nhead=self.num_heads, dim_feedforward=self.ff_dim, dropout=self.dropout,batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(self.encoder_layers, num_layers=self.num_layers).to(self.dev)
 
         # Transformer Decoder
-        self.decoder_layers = nn.TransformerDecoderLayer(d_model=self.decoder_size, nhead=self.num_heads, dim_feedforward=self.ff_dim, dropout=self.dropout)
+        self.decoder_layers = nn.TransformerDecoderLayer(d_model=self.decoder_size, nhead=self.num_heads, dim_feedforward=self.ff_dim, dropout=self.dropout,batch_first=True)
         self.transformer_decoder = nn.TransformerDecoder(self.decoder_layers, num_layers=self.num_layers).to(self.dev)
 
         # Fully connected layer for output
         self.fc = nn.Linear(self.decoder_size, self.output_size).to(self.dev)
 
     def forward(self, x):
-        encoder_input = x[0]
-        decoder_input = x[1]
+        encoder_input = self.fc_input_e(x[0])
+        decoder_input = self.fc_input_d(x[1])
         # Ensure the input sequence lengths match the specified lengths
         assert encoder_input.size(1) == self.encoder_seq_length, "Encoder input sequence length mismatch"
         assert decoder_input.size(1) == self.decoder_seq_length, "Decoder input sequence length mismatch"

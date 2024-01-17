@@ -36,8 +36,8 @@ if __name__ == '__main__':
         'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
-        'datetime_from': datetime(2022,1,1,0,0,0),
-        'datetime_to': datetime(2022,2,1,0,0,0),
+        'datetime_from': datetime(2018,1,1,0,0,0),
+        'datetime_to': datetime(2022,1,1,0,0,0),
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [2/4,1/4,1/4],
         'lookahead': la,
@@ -71,14 +71,19 @@ if __name__ == '__main__':
     OP_params_dict = {}
 
     dict_hps = {
-        'hidden_size_lstm': [32,64],
-        'layers_lstm': [2,3],
-        'lr': [0.005,0.0005],
+        'hidden_size_lstm': [32],
+        'layers_lstm': [2],
+        'lr': [0.003],
         'batch_size': [64],
         'strategy': 'grid_search',
-        'reg': [0,1],
+        'reg': [0],
         'list_units': [[16]],
-        'list_act': [['relu']]
+        'list_act': [['relu']],
+        'encoder_size': [64,128],
+        'num_heads': [4],
+        'num_layers': [2,4],
+        'ff_dim': [128,512],
+        'dropout': [0.1],
     }
 
     hp_trans = {
@@ -90,20 +95,25 @@ if __name__ == '__main__':
         'layers_lstm': 'nn',
         'hidden_size_lstm': 'nn',
         'list_units': 'nn',
-        'list_act': 'nn'
+        'list_act': 'nn',
+        'encoder_size': 'nn',
+        'num_heads': 'nn',
+        'num_layers': 'nn',
+        'ff_dim': 'nn',
+        'dropout': 'nn',
     }
 
     training_dict = {
         'device': dev,
         #'num_cpus': 2,
         'epochs': 100,
-        'patience': 20,
+        'patience': 10,
         'reg_type': 'quad',  # 'quad' or 'abs',
         'loss_fct_str': 'pinball',  # loss function that will be used to calculate gradients
         'loss_fcts_eval_str': ['pinball'],  # loss functions to be tracked during training procedure
         'loss_params': {'quantile_tensor': torch.tensor(data_dict['list_quantiles']).to(dev)},
         'exec': 'seq',  # 'seq' or 'par'
-        'makedir': False,
+        'makedir': True,
         'framework': 'NA' #Smoothing framework
     }
 
@@ -122,18 +132,11 @@ if __name__ == '__main__':
         'out_dim_per_neuron': len(data_dict['list_quantiles']),
         'dev': dev,
         #Stuff for transformer
-        'encoder_seq_length': 8,
-        'decoder_seq_length': 12,
-        'encoder_size': 14,
-        'decoder_size': 12,
-        'num_heads': 2,
-        'num_layers': 2,
-        'ff_dim': 256,
-        'dropout': 0.1,
-        'output_size': 9
+        'encoder_seq_length': lb,
+        'decoder_seq_length': la,
     }
 
-    save_loc = "../../train_SI_forecaster/output/trained_models/20240108_test/"
+    save_loc = f"output/trained_models/LA_{la}/20240117_transformer/"
 
     data = {
         'train': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_train],
