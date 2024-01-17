@@ -50,8 +50,12 @@ class Forecaster():
             self.nn = RNN_M2M(nn_params)
         elif nn_params['type'] == 'LSTM_ED':
             self.nn = LSTM_ED(nn_params)
+        elif nn_params['type'] == 'LSTM_ED_sep':
+            self.nn = LSTM_ED_sep(nn_params)
         elif nn_params['type'] == 'LSTM_ED_attn':
             self.nn = LSTM_ED_Attention(nn_params)
+        elif nn_params['type'] == 'ED_Transformer':
+            self.nn = ED_Transformer(nn_params)
         else:
             ValueError(f"{type} is not supported as neural network type")
 
@@ -701,6 +705,7 @@ class LSTM_ED(torch.nn.Module):
                                     batch_first=True,bidirectional=False).to(self.dev)  # Decoder
         self.fc = torch.nn.Linear(self.hidden_size_lstm, self.output_dim).to(self.dev) # fully connected 1
 
+
     def forward(self, list_data,dev_type='NA'):
         if dev_type == 'NA':
             dev = self.dev
@@ -720,13 +725,64 @@ class LSTM_ED(torch.nn.Module):
         out = torch.squeeze(self.fc(output_d))  # Final Output
         return out
 
+class LSTM_ED_sep(torch.nn.Module):
+    def __init__(self, nn_params):
+
+        super(LSTM_ED_sep, self).__init__()
+        self.input_size_e = nn_params['input_size_e']  # input size
+        self.input_size_d = nn_params['input_size_d']  # input size
+        self.layers_e = nn_params['layers_e']
+        self.layers_d = nn_params['layers_d']
+        self.hidden_size_lstm = nn_params['hidden_size_lstm']  # hidden state
+        self.output_dim = nn_params['output_dim']
+        self.dev = nn_params['dev']
+
+        self.encoders = torch.nn.ModuleList()
+        self.decoders = torch.nn.ModuleList()
+        self.fully_connected = torch.nn.ModuleList()
+
+        for i in range(self.output_dim):
+            self.encoders.append(
+                torch.nn.LSTM(input_size=self.input_size_e, hidden_size=self.hidden_size_lstm, num_layers=self.layers_e,
+                                    batch_first=True,bidirectional=False).to(self.dev)
+            )
+            self.decoders.append(torch.nn.LSTM(input_size=self.input_size_d, hidden_size=self.hidden_size_lstm, num_layers=self.layers_d,
+                                    batch_first=True,bidirectional=False).to(self.dev)
+            )
+            self.fully_connected.append(
+                torch.nn.Linear(self.hidden_size_lstm, 1).to(self.dev)
+            )
+
+    def forward(self, list_data,dev_type='NA'):
+        if dev_type == 'NA':
+            dev = self.dev
+        else:
+            dev = dev_type
+
+        x_e = list_data[0].to(dev)
+        x_d = list_data[1].to(dev)
+
+        h_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
+        c_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
+        # Propagate input through LSTM
+        list_out = []
+
+        for i in range(self.output_dim):
+            out_e,(h_e,c_e) = self.encoders[i](x_e,(h_0,c_0))
+            out_d, _ = self.decoders[i](x_d,(h_e,c_e))
+            out_fc = torch.squeeze(self.fully_connected[i](out_d))
+            list_out.append(out_fc)
+
+        out = torch.stack(list_out,dim=2)
+        return out
 
 class Attention(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size,dev):
         super(Attention, self).__init__()
         self.hidden_size = hidden_size
-        self.attn = nn.Linear(hidden_size * 2, hidden_size)
-        self.v = nn.Parameter(torch.rand(hidden_size))
+        self.dev = dev
+        self.attn = nn.Linear(hidden_size * 2, hidden_size).to(dev)
+        self.v = nn.Parameter(torch.rand(hidden_size)).to(dev)
         self.v.data.normal_(mean=0, std=1. / hidden_size**0.5)
 
     def forward(self, hidden, encoder_outputs):
@@ -762,7 +818,7 @@ class LSTM_ED_Attention(nn.Module):
                               batch_first=True, bidirectional=False).to(self.dev)  # Encoder
         self.lstm_d = nn.LSTM(input_size=self.input_size_d+self.hidden_size_lstm, hidden_size=self.hidden_size_lstm, num_layers=self.layers_d,
                               batch_first=True, bidirectional=False).to(self.dev)  # Decoder
-        self.attention = Attention(self.hidden_size_lstm)
+        self.attention = Attention(self.hidden_size_lstm,self.dev)
 
 
         self.list_units = nn_params['list_units']
@@ -782,16 +838,16 @@ class LSTM_ED_Attention(nn.Module):
 
         for i, units in enumerate(self.list_units):
             if i == 0:
-                self.hidden_layers.append(torch.nn.Linear(self.hidden_size_lstm, units))
+                self.hidden_layers.append(torch.nn.Linear(self.hidden_size_lstm, units).to(self.dev))
             else:
-                self.hidden_layers.append(torch.nn.Linear(self.list_units[i - 1], units))
+                self.hidden_layers.append(torch.nn.Linear(self.list_units[i - 1], units).to(self.dev))
 
             self.act_fcts.append(dict_act_fcts[self.list_act[i]])
 
         if len(self.list_units) > 0:
-            self.final_layer = torch.nn.Linear(self.list_units[-1], self.output_dim)
+            self.final_layer = torch.nn.Linear(self.list_units[-1], self.output_dim).to(self.dev)
         else:
-            self.final_layer = torch.nn.Linear(self.hidden_size_lstm, self.output_dim)
+            self.final_layer = torch.nn.Linear(self.hidden_size_lstm, self.output_dim).to(self.dev)
 
     def forward(self, list_data, dev_type='NA'):
         x_e = list_data[0]
@@ -827,3 +883,47 @@ class LSTM_ED_Attention(nn.Module):
         return out
 
 
+class ED_Transformer(nn.Module):
+    def __init__(self,nn_params):
+        super(ED_Transformer, self).__init__()
+
+        self.encoder_seq_length = nn_params['encoder_seq_length']
+        self.decoder_seq_length = nn_params['decoder_seq_length']
+        self.decoder_size = nn_params['decoder_size']
+        self.encoder_size = nn_params['encoder_size']
+        self.num_heads = nn_params['num_heads']
+        self.num_layers = nn_params['num_layers']
+        self.ff_dim = nn_params['ff_dim']
+        self.dropout = nn_params['dropout']
+        self.dev = nn_params['dev']
+        self.output_size = nn_params['output_size']
+
+
+        # Transformer Encoder
+        self.encoder_layers = nn.TransformerEncoderLayer(d_model=self.encoder_size, nhead=self.num_heads, dim_feedforward=self.ff_dim, dropout=self.dropout)
+        self.transformer_encoder = nn.TransformerEncoder(self.encoder_layers, num_layers=self.num_layers).to(self.dev)
+
+        # Transformer Decoder
+        self.decoder_layers = nn.TransformerDecoderLayer(d_model=self.decoder_size, nhead=self.num_heads, dim_feedforward=self.ff_dim, dropout=self.dropout)
+        self.transformer_decoder = nn.TransformerDecoder(self.decoder_layers, num_layers=self.num_layers).to(self.dev)
+
+        # Fully connected layer for output
+        self.fc = nn.Linear(self.decoder_size, self.output_size).to(self.dev)
+
+    def forward(self, x):
+        encoder_input = x[0]
+        decoder_input = x[1]
+        # Ensure the input sequence lengths match the specified lengths
+        assert encoder_input.size(1) == self.encoder_seq_length, "Encoder input sequence length mismatch"
+        assert decoder_input.size(1) == self.decoder_seq_length, "Decoder input sequence length mismatch"
+
+        # Forward pass through the transformer encoder
+        encoder_output = self.transformer_encoder(encoder_input)
+
+        # Forward pass through the transformer decoder
+        decoder_output = self.transformer_decoder(decoder_input, encoder_output)
+
+        # Apply fully connected layer for final prediction
+        output = self.fc(decoder_output)
+
+        return output

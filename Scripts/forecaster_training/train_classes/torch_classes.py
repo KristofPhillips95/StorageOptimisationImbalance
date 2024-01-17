@@ -96,10 +96,6 @@ class Loss(nn.Module):
             pinball_neg = torch.mul(diff_neg, 1 - self.params['quantile_tensor'])
 
             loss = torch.mean(torch.sum(pinball_pos - pinball_neg,axis=2))
-
-
-
-
         else:
             ValueError(f"{self.obj} unsupported loss function")
 

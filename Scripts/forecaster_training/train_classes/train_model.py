@@ -202,11 +202,12 @@ class Train_model():
                 self.loss_evolution[loss_str][2].append(
                     self.loss_fcts_eval[loss_str](yhat_test, self.data['test'][1]).item())
 
+            train_loss = self.loss_evolution[self.loss_fct_str][0][-1]
             val_loss = self.loss_evolution[self.loss_fct_str][1][-1]
             test_loss = self.loss_evolution[self.loss_fct_str][2][-1]
 
 
-        return val_loss,test_loss
+        return train_loss,val_loss,test_loss
 
     def train(self):
 
@@ -254,12 +255,11 @@ class Train_model():
 
             train_time = time.time() - train_start
 
-            print(f'Epoch {e + 1} \t\t Training Loss: {train_loss} \t\t Train time: {train_time}')
-            print(f"Loss fct: {loss_pure}; reg loss: {loss_reg}")
+            print(f"Epoch {e + 1} \t\t Training Loss: {train_loss} \t\t Train time: {train_time} \t\t Loss fct: {loss_pure}; reg loss: {loss_reg}")
 
             ### VALIDATION PHASE ###
 
-            val_loss,test_loss = self.update_loss_evol()
+            train_loss,val_loss,test_loss = self.update_loss_evol()
 
 
             print(f'Epoch {e + 1} \t\t Training Loss: {train_loss} \t\t Validation Loss: {val_loss} \t\t Test Loss: {test_loss}')

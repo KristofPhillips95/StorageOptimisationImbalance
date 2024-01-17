@@ -36,22 +36,15 @@ if __name__ == '__main__':
         'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
-        'datetime_from': datetime(2019,9,1,0,0,0),
-        'datetime_to': datetime(2023,9,1,0,0,0),
-        #'batch_size': 63,
+        'datetime_from': datetime(2022,1,1,0,0,0),
+        'datetime_to': datetime(2022,2,1,0,0,0),
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
-        'tvt_split': [5/7,1/7,1/7],
+        'tvt_split': [2/4,1/4,1/4],
         'lookahead': la,
         'lookback': lb,
-        #'n_components_feat':2, #number of input tensors to neural network for forward pass
-        #'n_components_lab': 1, #number of input tensors for loss function calc
         'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
-        #'store_code': '20231211_attention_bidirectional',
-        #'epochs': 100,
-        #'patience': 10,
         'loc_scaler': "../../scaling/Scaling_values.xlsx",
         "unscale_labels":True,
-        #'forecaster_type': 'ED_RNN_att' # 'ED_RNN' or 'ED_RNN_att'
     }
 
     #scaler = scaling.Scaler(idd['loc_scaler'])
@@ -78,15 +71,14 @@ if __name__ == '__main__':
     OP_params_dict = {}
 
     dict_hps = {
-        'hidden_size_lstm': [32],
-        'layers_lstm': [2],
+        'hidden_size_lstm': [32,64],
+        'layers_lstm': [2,3],
         'lr': [0.005,0.0005],
-        'batch_size': [32],
-        #'batch_size': [32,64,128], Not included here, defined in the larger stuff
-        #'recurrent_dropout': xyz #Is included in paper Jérémie (?)
-        #'gradient_norm': xyz #Also used in paper Jéremie (?)
+        'batch_size': [64],
         'strategy': 'grid_search',
-        'reg': [0],
+        'reg': [0,1],
+        'list_units': [[16]],
+        'list_act': [['relu']]
     }
 
     hp_trans = {
@@ -96,14 +88,16 @@ if __name__ == '__main__':
         'lr': 'train',
         'loss_fct_str': 'train',
         'layers_lstm': 'nn',
-        'hidden_size_lstm': 'nn'
+        'hidden_size_lstm': 'nn',
+        'list_units': 'nn',
+        'list_act': 'nn'
     }
 
     training_dict = {
         'device': dev,
         #'num_cpus': 2,
-        'epochs': 30,
-        'patience': 10,
+        'epochs': 100,
+        'patience': 20,
         'reg_type': 'quad',  # 'quad' or 'abs',
         'loss_fct_str': 'pinball',  # loss function that will be used to calculate gradients
         'loss_fcts_eval_str': ['pinball'],  # loss functions to be tracked during training procedure
@@ -114,11 +108,9 @@ if __name__ == '__main__':
     }
 
     nn_dict = {
-        'type': 'LSTM_ED',  # 'vanilla', 'vanilla_separate', 'RNN_decoder' or 'LSTM_ED'
+        'type': 'ED_Transformer',  # 'vanilla', 'vanilla_separate', 'RNN_decoder' or 'LSTM_ED'
         'seq_length_d': la,
         'seq_length_e': lb,
-        'list_units': [18],  # Vanilla
-        'list_act': ['relu'],  # Vanilla
         #'input_feat': len(data_dict['feat_cols']) * la,  # Vanilla
         'warm_start': False,
         'output_dim': len(data_dict['list_quantiles']),  # Vanilla & RNN_decoder
@@ -129,6 +121,16 @@ if __name__ == '__main__':
         'hidden_size_lstm': 32,
         'out_dim_per_neuron': len(data_dict['list_quantiles']),
         'dev': dev,
+        #Stuff for transformer
+        'encoder_seq_length': 8,
+        'decoder_seq_length': 12,
+        'encoder_size': 14,
+        'decoder_size': 12,
+        'num_heads': 2,
+        'num_layers': 2,
+        'ff_dim': 256,
+        'dropout': 0.1,
+        'output_size': 9
     }
 
     save_loc = "../../train_SI_forecaster/output/trained_models/20240108_test/"
