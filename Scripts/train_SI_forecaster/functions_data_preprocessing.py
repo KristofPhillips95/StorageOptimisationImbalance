@@ -7,7 +7,6 @@ sys.path.insert(0,"../data_preprocessing")
 sys.path.insert(0,"../scaling")
 import scaling
 
-
 def read_data_h5(input_dict, mode):
     """
     Function reading an h5py file into a df, selecting the right columns based on the mode (=past or fut)
