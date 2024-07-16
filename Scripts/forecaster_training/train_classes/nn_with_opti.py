@@ -2,18 +2,21 @@ import copy
 import numpy as np
 import cvxpy as cp
 import torch
+torch.autograd.set_detect_anomaly(True)
+
+import math
 from torch.autograd import Variable
 from cvxpylayers.torch import CvxpyLayer
 import torch_classes as ct
-from opti_problem import OptiProblem
+from opti_problem import OptiProblem,OptiProblemNew
 import torch.nn.functional as F
 import torch.nn as nn
 import random
+import pickle
 
 import sys
-sys.path.insert(0,"../../ML_proxy/")
+#sys.path.insert(0,"../../ML_proxy/")
 #from model import Storage_model
-
 
 class Forecaster():
 
@@ -25,51 +28,76 @@ class Forecaster():
         self.reg_type = reg_type
         self.reg_val = reg_val
 
-        self.init_net(nn_params)
+        self.nn = self.init_net(nn_params)
         self.init_diff_sched(training_params['framework'], OP_params)
         self.init_reg(reg_type,reg_val)
 
     def __call__(self,x):
-        prices = self.nn(x)  # .is_leaf_(True)
+        prices = self.get_price(x)  # .is_leaf_(True)
         #prices.retain_grad()
         if self.include_opti:
-            schedule = self.diff_sched_calc(prices)
-            return [prices,schedule]
+            if self.training_params['MPC']:
+                opti_input = [prices,x[2]]
+            else:
+                opti_input = prices
+            net_schedule,separate_schedules,*_ = self.diff_sched_calc(opti_input)
+            return [prices,net_schedule,separate_schedules]
         else:
             return [prices]
 
+    def get_price(self,x):
+        return self.nn(x)
+
     def init_net(self, nn_params):
 
-        if nn_params['type'] == "vanilla":
-            self.nn = NeuralNet(nn_params)
-        elif nn_params['type'] == "vanilla_separate":
-            self.nn = NeuralNetSep(nn_params)
-        elif nn_params['type'] == "RNN_decoder":
-            self.nn = Decoder(nn_params)
-        elif nn_params['type'] == 'RNN_M2M':
-            self.nn = RNN_M2M(nn_params)
-        elif nn_params['type'] == 'LSTM_ED':
-            self.nn = LSTM_ED(nn_params)
-        elif nn_params['type'] == 'LSTM_ED_sep':
-            self.nn = LSTM_ED_sep(nn_params)
-        elif nn_params['type'] == 'LSTM_ED_attn':
-            self.nn = LSTM_ED_Attention(nn_params)
-        elif nn_params['type'] == 'ED_Transformer':
-            self.nn = ED_Transformer(nn_params)
-        else:
-            ValueError(f"{type} is not supported as neural network type")
+        if not nn_params['warm_start']:
 
-        if nn_params['warm_start']:
-            self.nn = self.nn.warm_start(nn_params)
+            if nn_params['type'] == "vanilla":
+                nn = NeuralNet(nn_params)
+            elif nn_params['type'] == "vanilla_separate":
+                nn = NeuralNetSep(nn_params)
+            elif nn_params['type'] == "RNN_decoder":
+                nn = Decoder(nn_params)
+            elif nn_params['type'] == 'RNN_M2M':
+                nn = RNN_M2M(nn_params)
+            elif nn_params['type'] == 'LSTM_ED':
+                nn = LSTM_ED(nn_params)
+            elif nn_params['type'] == 'LSTM_ED_Attention':
+                nn = LSTM_ED_Attention(nn_params)
+            elif nn_params['type'] == 'ED_Transformer':
+                nn = ED_Transformer(nn_params)
+            else:
+                ValueError(f"{type} is not supported as neural network type")
+
+        else:
+
+            try: #new way
+                loc_state = nn_params['warm_start'] + "_dict_model.pkl"
+                loc_model = nn_params['warm_start'] + "_best_model.pth"
+                with open(loc_state, 'rb') as file:
+                    model_state = pickle.load(file)  # Gives a dict
+
+                params = model_state['nn_params']
+                params['dev'] = self.nn_params['dev']
+                nn = self.init_net(params) #Creates a neural net without warm start based with the same structure as pre-trained model
+                nn.load_state_dict(torch.load(loc_model))
+            except: #old way
+                'loading model in old way'
+                nn = torch.load(nn_params['warm_start']+"_best_model.pth",map_location=nn_params['dev']).nn
+                nn.set_device(nn_params['dev'])
+
+        return nn
+
+
 
     def init_diff_sched(self, fw, OP_params):
 
         if fw == "ID":
-            self.sc = Schedule_Calculator(OP_params, self.framework)
+            self.sc = Schedule_Calculator(OP_params, self.framework, self.nn_params['dev'])
             self.diff_sched_calc = OptiLayer(OP_params)
             self.include_opti = True
-        elif fw[0:2] == "GS":
-            self.sc = Schedule_Calculator(OP_params, self.framework)
+        elif fw in ['GS', 'GS_proxy', 'proxy_direct', 'proxy_direct_linear']:
+            self.sc = Schedule_Calculator(OP_params, self.framework, self.nn_params['dev'])
             self.diff_sched_calc = self.sc
             self.include_opti = True
         elif fw == "NA":
@@ -122,6 +150,9 @@ class Forecaster():
         clone_fc.set_nn(clone_nn)
 
         return clone_fc
+
+    def set_device(self,dev):
+        self.nn.set_device(dev)
 
 # class NeuralNetWithOpti():
 #
@@ -185,149 +216,368 @@ class Forecaster():
 class OptiLayer(torch.nn.Module):
     def __init__(self, params_dict):
         super(OptiLayer, self).__init__()
-        self.OP = OptiProblem(params_dict)
-        prob, params, vars = self.OP.get_opti_problem()
-        self.layer = CvxpyLayer(prob, params, vars)
+        self.params_dict = params_dict
+        #check_OP = OptiProblem(params_dict)
+        #check_prob, check_params, check_vars = check_OP.get_opti_problem(params_dict['MPC'])
+        self.OP = OptiProblemNew(params_dict)
+        self.prob, self.params, self.vars = self.OP.get_opti_problem()
+
+
+        self.layer = CvxpyLayer(self.prob, self.params, self.vars)
+        #check_layer = CvxpyLayer(check_prob,check_params,check_vars)
+
+        x=1
 
     def forward(self, x):
-        if isinstance(x,list):
-            x=x[0]
-        #return self.layer(x, solver_args={'max_iters': 10000, 'solve_method': 'ECOS'})[0]  # 'eps': 1e-4,'mode':'dense'
-        try:
-            result = self.layer(x,solver_args={"solve_method": "ECOS"})[0] #"n_jobs_forward": 1
-        except:
-            print("solvererror occured")
-            result = self.layer(x,solver_args={"solve_method": "SCS"})[0]
+        if (not isinstance(x,list)) or len(x)<2:
+            if len(x) == 1:
+                x=x[0]
+            soc_0 = torch.full((x.size(0),),self.params_dict['soc_0']).to(x.device).type(x.dtype)
+            try:
+                result = self.layer(soc_0,x, solver_args={"solve_method": "ECOS"})  # "n_jobs_forward": 1
+            except:
+                print("solvererror occured")
+                result = self.layer(soc_0,x, solver_args={"solve_method": "SCS"})
+        elif len(x) == 2:
+            try:
+                result = self.layer(x[1].squeeze(1),x[0], solver_args={"solve_method": "ECOS"})  # "n_jobs_forward": 1
+            except:
+                print("solvererror occured")
+                result = self.layer(x[1].squeeze(1),x[0], solver_args={"solve_method": "SCS"})
 
+        net_dis = result[0]
+        sched_separate = [result[1],result[2],result[3]]
+        return net_dis,sched_separate
 
-        return result
+    def rev_eng_mu(self,d,c):
+        """Function to calculate mu from optimized schedule"""
+        pass
 
 class Schedule_Calculator():
-    def __init__(self, OP_params_dict,fw):
+    def __init__(self, OP_params_dict,fw,dev,bs=1,mu_calculator=None):
         super(Schedule_Calculator,self).__init__()
 
         self.sm = OP_params_dict['smoothing']
         self.sm_value = OP_params_dict['gamma']
         self.fw = fw
+        self.dev = dev
+        self.bs = bs #get rid of this?
         self.OP_params_dict = copy.deepcopy(OP_params_dict)
+        self.op_sm = OptiProblemNew(OP_params_dict,bs) #smoothened optimization problem
         self.OP_params_dict['gamma'] = 0 #The optimization program to be used does not include the smoothing term: calculations based on actual linear problem
-        self.op_RN = OptiProblem(self.OP_params_dict) #TODO: check if order of setting gamme to 0 correct
+        self.op_RN = OptiProblemNew(self.OP_params_dict,bs) #linear optimization problem
+        #self.feas_repair = False
+        self.feas_repair = OP_params_dict['repair_proxy_feasibility']
 
-        op,params,vars = self.op_RN.get_opti_problem()
+        if self.fw in ['GS_proxy','proxy_direct','proxy_direct_linear']:
+            if mu_calculator is None:
+                self.initialize_proxy()
+            else:
+                self.mu_calculator = mu_calculator
 
-        self.params = params[0]
 
-        if self.fw == 'GS_proxy':
-            loc = '../../ML_proxy/trained_models/smoothing_training/'
-            config = 4
-            m = Storage_model.load_model(loc=loc,config=config)
-            self.mu_calculator = m.best_net
-            self.mu_calculator.set_dev("cpu")
-            #Fix the mu_calculator, i.e. don't allow it to get updated in the training process
-            for param in self.mu_calculator.parameters():
-                param.requires_grad=False
+        print(f"Repair: {self.feas_repair}")
 
-    def __call__(self,y_hat):
 
-        if self.fw == 'GS':
-            mu,_,_ = self.calc_linear(y_hat)
-        elif self.fw == 'GS_proxy':
-            mu = self.mu_calculator(y_hat.unsqueeze(2))[0]
+    def __call__(self,y_hat,smooth=True):
+
+        if not isinstance(y_hat, list):
+            mu_calc_input = [y_hat.unsqueeze(2)]
+            soc = None
         else:
-            raise ValueError(f"{self.fw} is an unsupported framework for gradient smoothing")
+            mu_calc_input = [y_hat[0].unsqueeze(2)] + y_hat[1:]
+            soc = y_hat[1]
+            y_hat = y_hat[0]
 
-        d_sm = self.calc_sm_d(y_hat,mu)
-        c_sm = self.calc_sm_c(y_hat,mu)
+        if smooth:
+            if self.fw[0:2] == "GS":
+                if self.fw == 'GS':
+                    mu = self.get_opti_outcome(y_hat,smooth=False)[2]
+                elif self.fw == 'GS_proxy':
+                    mu = self.mu_calculator(mu_calc_input)[0]
+                else:
+                    raise ValueError(f"{self.fw} is an unsupported framework for gradient smoothing")
 
-        net_sched_sm = d_sm*self.OP_params_dict['eff_d'] - c_sm/self.OP_params_dict['eff_c']
+                d_sm = self.calc_sm_d(y_hat,mu)
+                c_sm = self.calc_sm_c(y_hat,mu)
 
-        return net_sched_sm
+                if self.feas_repair:
+                    d_sm,c_sm = self.repair_decisions(d_sm,c_sm,y_hat,soc)
 
-    def calc_sm_d(self,y_hat,mu):
+            elif self.fw in ["proxy_direct","proxy_direct_linear"]:
 
-        def kahan_summation(input_list):
-            sum_ = 0.0
-            c = 0.0  # A running compensation for lost low-order bits.
-            for x in input_list:
-                y = x - c  # So far, so good: c is zero.
-                t = sum_ + y  # Alas, sum_ is big, y small, so low-order digits of y are lost.
-                c = (t - sum_) - y  # (t - sum_) recovers the high-order part of y; subtracting y recovers -(low part of y)
-                sum_ = t  # Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
-            return sum_
+                #[mu,d_sm,c_sm] = self.mu_calculator(mu_calc_input)
+                out = self.mu_calculator(mu_calc_input)
+                mu = out[0]
+                d_sm = out[1]
+                c_sm = out[2]
+                #TODO: re-scale d and c based on (i) max (dis)charge and (ii) what the model was trained for
 
-        def calc_d_quadr(y_hat,mu):
-            condition1 = mu < y_hat * self.OP_params_dict['eff_d']
-            condition2 = y_hat * self.OP_params_dict['eff_d']< mu + self.sm_value * self.OP_params_dict['max_discharge']
-            final_condition = condition1 & condition2
-
-            d_1 = 0 * (1-condition1.int())
-            d_2 = (self.OP_params_dict["eff_d"]*y_hat - mu)/self.sm_value * final_condition.int()
-            d_3 = self.OP_params_dict["max_discharge"] * (1-condition2.int())
-
-            return d_1+d_2+d_3
-
-        def calc_d_logBar(y_hat, mu):
-            P = self.OP_params_dict['max_discharge']
-            A = y_hat * self.OP_params_dict['eff_d'] - mu
+                if self.feas_repair:
+                    d_sm,c_sm = self.repair_decisions(d_sm,c_sm,y_hat,soc)
 
 
-            x = kahan_summation([A * P, - 2 * self.sm_value])
-            x_squared = kahan_summation([torch.square(A)*P**2, - 4*A*P*self.sm_value, 4*self.sm_value**2])
+            elif self.fw == "ID":
 
-            epsilon = 1e-4
-            mask_zero = torch.abs(A) < epsilon
-            mask_nonzero = ~mask_zero
+                d_sm,c_sm,mu = self.get_opti_outcome(y_hat,smooth=True)
 
-            cutoff_y, slope = self.get_linear_interp(epsilon,P)
+            net_sched_sm = d_sm * self.OP_params_dict['eff_d'] - c_sm / self.OP_params_dict['eff_c']
 
-            d = torch.zeros_like(A)
-            d[mask_zero] = self.OP_params_dict['max_discharge']/2
-            d[mask_nonzero] = (x[mask_nonzero] + torch.sqrt(x_squared[mask_nonzero] + 4 * A[mask_nonzero] * self.sm_value * P)) / (2 * A[mask_nonzero])
+            return net_sched_sm, [d_sm,c_sm], mu
 
-            return d
+        else:
 
-        if self.sm == "quadratic":
-            d = calc_d_quadr(y_hat,mu)
-        elif self.sm == "logBar":
-            d = calc_d_logBar(y_hat,mu)
+            d,c,mu = self.get_opti_outcome(y_hat,smooth=False)
+
+            net_sched = d * self.OP_params_dict['eff_d'] - c / self.OP_params_dict['eff_c']
+
+            return net_sched, [d,c], mu
+
+    def initialize_proxy(self):
+        loc = self.OP_params_dict['loc_proxy_model']
+        m = Storage_model.load_model(loc=loc)
+        self.mu_calculator = m.best_net
+        self.mu_calculator.set_dev(self.dev)
+        # Fix the mu_calculator, i.e. don't allow it to get updated in the training process
+        for param in self.mu_calculator.parameters():
+            param.requires_grad = True
+
+    def kahan_summation(self,input_list):
+        sum_ = 0.0
+        c = 0.0  # A running compensation for lost low-order bits.
+        for x in input_list:
+            y = x - c  # So far, so good: c is zero.
+            t = sum_ + y  # Alas, sum_ is big, y small, so low-order digits of y are lost.
+            c = (t - sum_) - y  # (t - sum_) recovers the high-order part of y; subtracting y recovers -(low part of y)
+            sum_ = t  # Algebraically, c should always be zero. Beware overly-aggressive optimizing compilers!
+        return sum_
+
+    def calc_d_quadr(self,y_hat, mu):
+        condition1 = mu < y_hat * self.OP_params_dict['eff_d']
+        condition2 = y_hat * self.OP_params_dict['eff_d'] < mu + self.sm_value * self.OP_params_dict['max_discharge']
+        final_condition = condition1 & condition2
+
+        d_1 = 0 * (1 - condition1.int())
+        d_2 = ((self.OP_params_dict["eff_d"] * y_hat - mu) / self.sm_value * final_condition.int())
+        d_3 = (self.OP_params_dict["max_discharge"] * (1 - condition2.int()))
+
+        return d_1 + d_2 + d_3
+
+    def calc_d_quadr_symm(self,y_hat, mu):
+        delta = (self.sm_value * self.OP_params_dict['max_discharge'])/2
+        condition1 = y_hat > (mu - delta)/ self.OP_params_dict['eff_d']
+        condition2 = y_hat < (mu + delta) / self.OP_params_dict['eff_d']
+        final_condition = condition1 & condition2
+
+        d_1 = 0 * (1 - condition1.int())
+        d_2 = ((self.OP_params_dict["eff_d"] * y_hat - (mu-delta)) / self.sm_value * final_condition.int())
+        d_3 = (self.OP_params_dict["max_discharge"] * (1 - condition2.int()))
+
+        # check_y_hat = y_hat.cpu().detach().numpy()
+        # check_mu = mu.cpu().detach().numpy()
+        #
+        # check_d_1 = d_1.cpu().detach().numpy()
+        # check_d_2 = d_2.cpu().detach().numpy()
+        # check_d_3 = d_3.cpu().detach().numpy()
+
+        return d_1 + d_2 + d_3
+
+    def calc_d_logistic(self,y_hat, mu, k=1):
+        delta = (self.sm_value * self.OP_params_dict['max_discharge'])/2
+
+        condition1 = y_hat > (mu - delta)/ self.OP_params_dict['eff_d']
+        condition2 = y_hat < (mu + delta) / self.OP_params_dict['eff_d']
+        final_condition = condition1 & condition2
+
+        A = (1+math.exp(k*delta))/(math.exp(k*delta)-1)
+        B = 1/2*(1-A)
+        x_0 = mu / self.OP_params_dict['eff_d']
+
+        d_1 = torch.zeros_like(y_hat) * (~condition1)
+        d_2 = self.OP_params_dict['max_charge'] *((A/(1+torch.exp(-k*(y_hat-x_0)))) + B) * final_condition
+        d_3 = self.OP_params_dict["max_discharge"] * torch.ones_like(y_hat) * (~condition2)
+
+        # check_y_hat = y_hat.cpu().detach().numpy()
+        # check_mu = mu.cpu().detach().numpy()
+        #
+        # check_d_1 = d_1.cpu().detach().numpy()
+        # check_d_2 = d_2.cpu().detach().numpy()
+        # check_d_3 = d_3.cpu().detach().numpy()
+
+        return d_1 + d_2 + d_3
+
+    def calc_d_piecewise(self,y_hat, mu):
+        delta = (self.sm_value * self.OP_params_dict['max_discharge'])/2
+        x_0 = mu / self.OP_params_dict['eff_d']
+
+
+        condition1 = y_hat > (mu - delta)/ self.OP_params_dict['eff_d']
+        condition2 = y_hat < (mu + delta) / self.OP_params_dict['eff_d']
+        condition3 = y_hat < x_0
+
+        condition_left = condition1 & condition3
+        condition_right = condition2 &(~condition3)
+
+        a = self.OP_params_dict['max_discharge']/(2*delta**2)
+        b = self.OP_params_dict['max_discharge']/delta
+        c = self.OP_params_dict['max_discharge']/2
+
+
+        d_1 = torch.zeros_like(y_hat) * (~condition1)
+        d_2 = (a*torch.square(y_hat-x_0) + b*(y_hat-x_0) + c) * condition_left
+        d_3 = (-a*torch.square(y_hat-x_0) + b*(y_hat-x_0) + c) * condition_right
+        d_4 = self.OP_params_dict["max_discharge"] * torch.ones_like(y_hat) * (~condition2)
+
+        return d_1 + d_2 + d_3 + d_4
+
+    def calc_d_logBar(self,y_hat, mu):
+        P = self.OP_params_dict['max_discharge']
+        A = y_hat * self.OP_params_dict['eff_d'] - mu
+
+        x = self.kahan_summation([A * P, - 2 * self.sm_value])
+        x_squared = self.kahan_summation([torch.square(A) * P ** 2, - 4 * A * P * self.sm_value, 4 * self.sm_value ** 2])
+
+        epsilon = 1e-4
+        mask_zero = torch.abs(A) < epsilon
+        mask_nonzero = ~mask_zero
+
+        cutoff_y, slope = self.get_linear_interp(epsilon, P)
+
+        d = torch.zeros_like(A)
+        d[mask_zero] = self.OP_params_dict['max_discharge'] / 2
+        d[mask_nonzero] = (x[mask_nonzero] + torch.sqrt(
+            x_squared[mask_nonzero] + 4 * A[mask_nonzero] * self.sm_value * P)) / (2 * A[mask_nonzero])
 
         return d
 
-    def calc_sm_c(self,y_hat,mu):
-        def calc_c_quadr(y_hat,mu):
-            condition1 = mu > y_hat / self.OP_params_dict['eff_c']
-            condition2 = y_hat / self.OP_params_dict['eff_c']> mu - self.sm_value * self.OP_params_dict['max_discharge']
-            final_condition = condition1 & condition2
-
-            c_1 = 0 * (1-condition1.int())
-            c_2 = (mu - y_hat/self.OP_params_dict['eff_c'])/self.sm_value * final_condition.int()
-            c_3 = self.OP_params_dict["max_charge"] * (1-condition2.int())
-
-            return c_1 + c_2 + c_3
-
-        def calc_c_logBar(y_hat,mu):
-            P = self.OP_params_dict['max_charge']
-            A = mu - y_hat / self.OP_params_dict['eff_c']
-
-            x = A * self.OP_params_dict['max_charge'] - 2 * self.sm_value
-
-            epsilon = 1e-4
-            mask_zero = torch.abs(A) < epsilon
-            mask_nonzero = ~mask_zero
-
-            cutoff_y, slope = self.get_linear_interp(epsilon,P)
-
-            c = torch.zeros_like(A)
-            c[mask_zero] = cutoff_y + slope*(A[mask_zero]+epsilon)
-            c[mask_nonzero] = (x[mask_nonzero] + torch.sqrt(torch.square(x[mask_nonzero]) + 4 * A[mask_nonzero] * self.sm_value * self.OP_params_dict['max_charge']))/(2*A[mask_nonzero])
-
-            return c
-
+    def calc_sm_d(self,y_hat,mu):
 
         if self.sm == "quadratic":
-            c = calc_c_quadr(y_hat,mu)
+            d = self.calc_d_quadr(y_hat,mu)
+        elif self.sm == "quadratic_symm":
+            d = self.calc_d_quadr_symm(y_hat,mu)
+        elif self.sm == "logistic":
+            d = self.calc_d_logistic(y_hat,mu)
+        elif self.sm == "piecewise":
+            d = self.calc_d_piecewise(y_hat, mu)
         elif self.sm == "logBar":
-            c = calc_c_logBar(y_hat,mu)
+            d = self.calc_d_logBar(y_hat,mu)
+
+        return d
+
+    def calc_c_quadr(self,y_hat, mu):
+        condition1 = mu > y_hat / self.OP_params_dict['eff_c']
+        condition2 = y_hat / self.OP_params_dict['eff_c'] > mu - self.sm_value * self.OP_params_dict['max_discharge']
+        final_condition = condition1 & condition2
+
+        c_1 = 0 * (1 - condition1.int())
+        c_2 = (mu - y_hat / self.OP_params_dict['eff_c']) / self.sm_value * final_condition.int()
+        c_3 = self.OP_params_dict["max_charge"] * (1 - condition2.int())
+
+        return c_1 + c_2 + c_3
+
+    def calc_c_quadr_symm(self,y_hat, mu):
+
+        delta = (self.sm_value * self.OP_params_dict['max_discharge'])/2
+
+        condition1 = y_hat / self.OP_params_dict['eff_c'] < mu + delta
+        condition2 = y_hat / self.OP_params_dict['eff_c'] > mu - delta
+        final_condition = condition1 & condition2
+
+        c_1 = 0 * (1 - condition1.int())
+        c_2 = (mu + delta - y_hat / self.OP_params_dict['eff_c']) / self.sm_value * final_condition.int()
+        c_3 = self.OP_params_dict["max_charge"] * (1 - condition2.int())
+
+        # check_y_hat = y_hat.cpu().detach().numpy()
+        # check_mu = mu.cpu().detach().numpy()
+        #
+        # check_c_1 = c_1.cpu().detach().numpy()
+        # check_c_2 = c_2.cpu().detach().numpy()
+        # check_c_3 = c_3.cpu().detach().numpy()
+
+
+        return c_1 + c_2 + c_3
+
+    def calc_c_logistic(self,y_hat, mu, k=1):
+
+        delta = (self.sm_value * self.OP_params_dict['max_discharge'])/2
+
+        condition1 = y_hat / self.OP_params_dict['eff_c'] < mu + delta
+        condition2 = y_hat / self.OP_params_dict['eff_c'] > mu - delta
+        final_condition = condition1 & condition2
+
+        A = (1+math.exp(-k*delta))/(math.exp(-k*delta)-1)
+        B = 1/2*(1-A)
+        x_0 = mu * self.OP_params_dict['eff_c']
+
+        c_1 = torch.zeros_like(y_hat) * (~condition1)
+        c_2 = self.OP_params_dict['max_charge'] *((A/(1+torch.exp(-k*(y_hat-x_0)))) + B) * final_condition
+        c_3 = self.OP_params_dict["max_discharge"] * torch.ones_like(y_hat) * (~condition2)
+
+        check_y_hat = y_hat.cpu().detach().numpy()
+        check_mu = mu.cpu().detach().numpy()
+
+        check_c_1 = c_1.cpu().detach().numpy()
+        check_c_2 = c_2.cpu().detach().numpy()
+        check_c_3 = c_3.cpu().detach().numpy()
+
+
+        return c_1 + c_2 + c_3
+
+    def calc_c_piecewise(self, y_hat, mu):
+        delta = (self.sm_value * self.OP_params_dict['max_discharge']) / 2
+        x_0 = mu * self.OP_params_dict['eff_c']
+
+        condition1 = y_hat > (mu - delta) * self.OP_params_dict['eff_d']
+        condition2 = y_hat < (mu + delta) * self.OP_params_dict['eff_d']
+        condition3 = y_hat < x_0
+
+        condition_left = condition1 & condition3
+        condition_right = condition2 & (~condition3)
+
+        a = self.OP_params_dict['max_discharge'] / (2 * delta ** 2)
+        b = self.OP_params_dict['max_discharge'] / delta
+        c = self.OP_params_dict['max_discharge'] / 2
+
+        c_1 = torch.zeros_like(y_hat) * (~condition2)
+        c_2 = (-a * torch.square(y_hat - x_0) - b * (y_hat - x_0) + c) * condition_left
+        c_3 = (a * torch.square(y_hat - x_0) - b * (y_hat - x_0) + c) * condition_right
+        c_4 = self.OP_params_dict["max_discharge"] * torch.ones_like(y_hat) * (~condition1)
+
+        return c_1 + c_2 + c_3 + c_4
+
+    def calc_c_logBar(self,y_hat, mu):
+        P = self.OP_params_dict['max_charge']
+        A = mu - y_hat / self.OP_params_dict['eff_c']
+
+        x = A * self.OP_params_dict['max_charge'] - 2 * self.sm_value
+
+        epsilon = 1e-4
+        mask_zero = torch.abs(A) < epsilon
+        mask_nonzero = ~mask_zero
+
+        cutoff_y, slope = self.get_linear_interp(epsilon, P)
+
+        c = torch.zeros_like(A)
+        c[mask_zero] = cutoff_y + slope * (A[mask_zero] + epsilon)
+        c[mask_nonzero] = (x[mask_nonzero] + torch.sqrt(
+            torch.square(x[mask_nonzero]) + 4 * A[mask_nonzero] * self.sm_value * self.OP_params_dict[
+                'max_charge'])) / (2 * A[mask_nonzero])
+
+        return c
+
+    def calc_sm_c(self,y_hat,mu):
+
+        if self.sm == "quadratic":
+            c = self.calc_c_quadr(y_hat,mu)
+        elif self.sm == "quadratic_symm":
+            c = self.calc_c_quadr_symm(y_hat,mu)
+        elif self.sm == "logistic":
+            c = self.calc_c_logistic(y_hat,mu)
+        elif self.sm == "piecewise":
+            c = self.calc_c_piecewise(y_hat,mu)
+        elif self.sm == "logBar":
+            c = self.calc_c_logBar(y_hat,mu)
 
         return c
 
@@ -342,37 +592,39 @@ class Schedule_Calculator():
     def set_sm_val(self,val):
         self.sm_value = val
 
-    def calc_linear(self,y_hat):
-        if isinstance(y_hat,list):
-            y_hat = y_hat[0]
-        d = torch.zeros_like(y_hat,requires_grad=False)
-        c = torch.zeros_like(y_hat,requires_grad=False)
-        mu = torch.zeros_like(y_hat,requires_grad=False)
+    def calc_linear(self,y_hat,fix_soc=True):
 
-        y_hat_np = y_hat.detach().numpy()
+        lambda_hat = y_hat[0]
+
+        d = np.zeros_like(lambda_hat.cpu().detach().numpy())
+        c = np.zeros_like(lambda_hat.cpu().detach().numpy())
+        mu = np.zeros_like(lambda_hat.cpu().detach().numpy())
+
+        lambda_hat_np = lambda_hat.cpu().detach().numpy()
+
 
         try:
-            _ = y_hat.size()[1]
+            _ = lambda_hat.size()[1]
 
-            for i in range(y_hat.size()[0]):
+            for i in range(lambda_hat.size()[0]):
 
-                self.params.value = y_hat_np[i, :]
-                self.op_RN.solve(solver=cp.GUROBI)
+                if fix_soc:
+                    self.op_RN.params[0].value = y_hat[1]
+                self.op_RN.params[1].value = lambda_hat_np[i, :]
+                self.op_RN.prob.solve(solver=cp.GUROBI)
 
-                list_keys = list(self.op_RN.var_dict.keys())
+                d[i,:] = self.op_RN.vars[1].value
+                c[i,:] = self.op_RN.vars[2].value
 
-                d[i, :] = torch.from_numpy(self.op_RN.var_dict[list_keys[0]].value)
-                c[i, :] = torch.from_numpy(self.op_RN.var_dict[list_keys[1]].value)
-                mu[i, 0] = self.op_RN.constraints[6].dual_value[0]
                 for j in range(self.OP_params_dict['lookahead']):
                     if j == 0:
-                        mu[i, j] = self.op.constraints[6].dual_value[j]
+                        mu[i, j] = self.op_RN.constraints[6].dual_value[j]
                     else:
-                        mu[i, j] = self.op.constraints[7].dual_value[j]
+                        mu[i, j] = self.op_RN.constraints[7].dual_value[j]
 
         except:
 
-            self.params.value = y_hat_np[:]
+            self.params.value = lambda_hat_np[:]
             self.op.solve(solver=cp.GUROBI)
 
             list_keys = list(self.op.var_dict.keys())
@@ -385,17 +637,419 @@ class Schedule_Calculator():
                     mu[j] = self.op.constraints[6].dual_value[j]
                 else:
                     mu[j] = self.op.constraints[7].dual_value[j]
+        #
 
-        return mu,d,c
+        return [d,c,mu]
+
+    def calc_linear_batched(self, y_hat, fix_soc=True):
+        lambda_hat = y_hat[0]
+        net_sched = np.zeros_like(lambda_hat.cpu().detach().numpy())
+        mu = np.zeros_like(lambda_hat.cpu().detach().numpy())
+
+        lambda_hat_np = lambda_hat.cpu().detach().numpy()
+        batch_size = lambda_hat.size()[0]
+
+        if fix_soc:
+            self.op_RN.params[0].value = y_hat[1]
+        self.op_RN.params[1].value = lambda_hat_np
+
+            # Solve the optimization problem
+        self.op_RN.prob.solve(solver=cp.GUROBI)
+
+        # Extract net_sched
+        net_sched = self.op_RN.vars[0].value
+
+        # Extract dual values
+        for i in range(self.bs):
+
+            mu[i, 0] = self.op_RN.constraints[2*i+7].dual_value[0]
+            for j in range(1, self.OP_params_dict['lookahead']):
+                mu[i, j] = self.op_RN.constraints[2*i+8].dual_value[j]
+
+        return [net_sched, mu]
+
+    def repair_decisions(self,d,c,price,soc=None):
+
+        #overshoot, undershoot, cyclic_bc_inf = self.calculate_infeasibility(d.cpu(), c.cpu())
+        #print(f"Before repair: Overshoot: {overshoot}, undershoot: {undershoot}, cyclic_bc: {cyclic_bc_inf}")
+
+        s_prov = torch.zeros_like(d)
+        s = torch.zeros_like(d)
+
+        s_prov[:,0] = self.OP_params_dict['soc_0'] + c[:,0] - d[:,0]
+        d[:,0],c[:,0] = self.constrain_decisions(s_prov[:,0],d[:,0],c[:,0])
+        if soc is None:
+            s[:,0] = self.OP_params_dict['soc_0'] + c[:,0] - d[:,0]
+        else:
+            s[:,0] = soc[:,0] + c[:,0] - d[:,0]
+
+        if self.OP_params_dict['constrain_decisions'] == 'greedy':
+            for i in range(s.shape[1]-1):
+                s_prov[:,i+1] = s[:,i] + c[:,i+1] - d[:,i+1]
+                d[:,i+1], c[:,i+1] = self.constrain_decisions(s_prov[:,i+1], d[:,i+1], c[:,i+1])
+                s[:,i+1] = s[:,i] + c[:,i+1] - d[:,i+1]
+        elif self.OP_params_dict['constrain_decisions'] == 'avg':
+            last_extr = -np.ones(s.shape[0])
+            for i in range(s.shape[1]-1):
+                s_prov[:,i+1] = s_prov[:,i] + c[:,i+1] - d[:,i+1]
+                d,c,s_prov,last_extr = self.constrain_decisions_average(s_prov,d,c,last_extr,i)
+            s = s_prov
+        elif self.OP_params_dict['constrain_decisions'] in ['priority','rescale']:
+            s_prov = torch.ones((d.shape[0],d.shape[1]+1)).to(d.device) * self.OP_params_dict['soc_0']
+            last_extr = np.zeros(d.shape[0])
+            for i in range(d.shape[1]):
+                s_prov[:,i+1] = s_prov[:,i] + c[:,i] - d[:,i]
+                if i > 0:
+                    d,c,s_prov,last_extr = self.constrain_decisions_priority(s_prov.cpu(),d.cpu(),c.cpu(),last_extr,i,price,self.OP_params_dict['constrain_decisions'])
+
+            s = s_prov[:,1:]
+
+
+        else:
+            for i in range(s.shape[1]-1):
+                s[:,i+1] = s[:,i] + c[:,i+1] - d[:,i+1]
+
+        #overshoot, undershoot, cyclic_bc_inf = self.calculate_infeasibility(d.cpu(), c.cpu())
+        #print(f"After repair: Overshoot: {overshoot}, undershoot: {undershoot}, cyclic_bc: {cyclic_bc_inf}")
+
+        if self.OP_params_dict['cyclic_bc']:
+            if self.OP_params_dict['restore_cyclic_bc'] == 'rescale':
+                d,c = self.rescale_decisions_cyclicBC(d,c)
+            elif self.OP_params_dict['restore_cyclic_bc'] == 'greedy':
+                d,c = self.restore_decisions_vectorized(d,c)
+            else:
+                raise ValueError(f"{self.OP_params_dict['restore_cyclic_bc']} unsupported way of restoring cyclic boundary conditions")
+
+        #overshoot, undershoot, cyclic_bc_inf = self.calculate_infeasibility(d.cpu(), c.cpu())
+        #print(f"After rescale 2: Overshoot: {overshoot}, undershoot: {undershoot}, cyclic_bc: {cyclic_bc_inf}")
+
+        return d,c
+
+    def calculate_infeasibility(self,d,c):
+        s = torch.zeros_like(d)
+        overshoot = torch.zeros(d.shape[0])
+        undershoot = torch.zeros(d.shape[0])
+        cyclic_bc_inf = torch.zeros(d.shape[0])
+
+        for i in range(d.shape[0]):
+            for j in range(d.shape[1]):
+                if j == 0:
+                    s[i,j] = self.OP_params_dict['soc_0'] + c[i,j] - d[i,j]
+                else:
+                    s[i,j] = s[i,j-1] + c[i,j] - d[i,j]
+
+                if s[i,j] > self.OP_params_dict['max_soc']:
+                    overshoot[i] += s[i,j] - self.OP_params_dict['max_soc']
+                elif s[i,j] < self.OP_params_dict['min_soc']:
+                    undershoot[i] +=  self.OP_params_dict['min_soc'] - s[i,j]
+
+            if self.OP_params_dict['cyclic_bc']:
+                cyclic_bc_inf[i] = torch.abs(s[i,j]-self.OP_params_dict['soc_0'])
+
+        return torch.sum(overshoot).item(), torch.sum(undershoot).item(), torch.sum(cyclic_bc_inf).item()
+
+    def constrain_decisions_average(self,s_prov, d, c, last_extr, la):
+
+        epsilon = self.OP_params_dict['max_charge']/1000
+
+        def rescale_decisions(d, c, s_prov):
+            # c and d are the decisions taken between the last extreme value and this one
+
+            if s_prov[-1] > self.OP_params_dict['max_soc']:
+                overshoot = s_prov[-1] - self.OP_params_dict['max_soc']
+                rescale_factor = (torch.sum(c) - overshoot) / torch.sum(c)
+                c *= rescale_factor
+            else:
+                overshoot = self.OP_params_dict['min_soc'] - s_prov[-1]
+                rescale_factor = (torch.sum(d) - overshoot) / torch.sum(d)
+                d *= rescale_factor
+
+            return d, c
+
+        def recalculate_soc(d, c, s,e):
+            # tensors d,c: length N; tensor s: lenght s, starting with the value of the previous extreme
+            if e == -1:
+                s = torch.zeros(d.shape[0]+1)
+                s[0] = self.OP_params_dict['soc_0']
+            for la in range(d.shape[0]):
+                s[la + 1] = s[la] + c[la] - d[la]  # Notice that the arrays have shifted here
+            return s[1:]
+
+        for i in range(s_prov.shape[0]):
+            extreme_below_min_soc = (s_prov[i, la] < self.OP_params_dict['min_soc'] - epsilon) & (s_prov[i, la + 1] >= s_prov[i, la])
+            extreme_above_max_soc = (s_prov[i, la] > self.OP_params_dict['max_soc'] + epsilon) & (s_prov[i, la + 1] <= s_prov[i, la])
+            if extreme_above_max_soc or extreme_below_min_soc:
+                e = int(last_extr[i])
+                last_extr[i] = la
+                d[i, e + 1:la+1], c[i, e + 1:la+1] = rescale_decisions(d[i, e + 1:la+1], c[i, e + 1:la+1],s_prov[i,e+1:la+1])
+                s_prov[i, e + 1:la+1] = recalculate_soc(d[i, e + 1:la+1], c[i, e + 1:la+1], s_prov[i, e:la+1],e)
+                s_prov[i, la+1] = s_prov[i,la] + c[i,la+1] - d[i,la+1]
+
+        return d,c,s_prov,last_extr
+
+    def constrain_decisions_priority(self,s_prov, d, c, last_extr, la, price,type):
+
+        epsilon = self.OP_params_dict['max_charge']/10000
+
+        def rescale_decisions(d, c, s_prov):
+            # c and d are the decisions taken between the last extreme value and this one
+
+            epsilon = 1e-6
+
+            if s_prov[-1] > self.OP_params_dict['max_soc']:
+                overshoot = s_prov[-1] - self.OP_params_dict['max_soc']
+                rescale_factor = (torch.sum(c) - overshoot) / (torch.sum(c) + epsilon)
+                c *= rescale_factor
+            else:
+                overshoot = self.OP_params_dict['min_soc'] - s_prov[-1]
+                rescale_factor = (torch.sum(d) - overshoot) / (torch.sum(d) + epsilon)
+                d *= rescale_factor
+
+            return d, c
+
+        def recalculate_soc(d, c, s):
+            # tensors d,c: length N; tensor s: lenght s, starting with the value of the previous extreme
+
+            for la in range(d.shape[0]):
+                s[la + 1] = s[la] + c[la] - d[la]  # Notice that the arrays have shifted here
+            return s
+
+        def prioritize_decisions(d, c, s_prov, price):
+            epsilon = 1e-6
+            # Calculate overshoot or undershoot
+            if s_prov[-1] > self.OP_params_dict['max_soc']:
+                overshoot = s_prov[-1] - self.OP_params_dict['max_soc']
+                # Sort p to get indices for prioritizing d adjustments (higher price first for discharging)
+                sorted_indices = torch.argsort(price,descending=True)
+                for idx in sorted_indices:
+                    # Calculate the adjustment needed
+                    adjustment = torch.min(c[idx].clone(), overshoot.clone())
+                    c[idx] = c[idx] -  adjustment
+                    overshoot = overshoot - adjustment
+                    # Break if no more adjustment is needed
+                    if overshoot <= epsilon:
+                        break
+            elif s_prov[-1] < self.OP_params_dict['min_soc']:
+                undershoot = self.OP_params_dict['min_soc'] - s_prov[-1]
+                # Sort p to get indices for prioritizing c adjustments (lower price first for charging)
+                sorted_indices = torch.argsort(price)
+                for idx in sorted_indices:
+                    # Calculate the adjustment needed
+                    adjustment = torch.min(d[idx].clone(), undershoot.clone())
+                    d[idx] = d[idx] - adjustment
+                    undershoot = undershoot - adjustment
+                    # Break if no more adjustment is needed
+                    if undershoot <= epsilon:
+                        break
+
+            return d, c
+
+        for i in range(s_prov.shape[0]):
+
+            extr_low = (s_prov[i,la-1] > s_prov[i,la]) & (s_prov[i,la] <= s_prov[i,la+1])
+            extr_high = (s_prov[i,la-1] < s_prov[i,la]) & (s_prov[i,la] >= s_prov[i,la+1])
+
+            if extr_low or extr_high:
+                e = int(last_extr[i])
+                last_extr[i] = la
+
+                if (s_prov[i,la] > self.OP_params_dict['max_soc'] + epsilon) or (s_prov[i,la] < self.OP_params_dict['min_soc'] - epsilon):
+
+                    if type == 'rescale':
+                        d[i, e:la], c[i, e:la] = rescale_decisions(d[i, e:la], c[i, e:la],s_prov[i, e:la+1])
+                    elif type == 'priority':
+                        d[i, e:la], c[i, e:la] = prioritize_decisions(d[i, e:la], c[i, e:la],s_prov[i, e:la+1],price[i,e:la])
+
+                    s_prov[i, e:la+1] = recalculate_soc(d[i, e :la], c[i,e:la],s_prov[i,e:la + 1])
+
+
+        return d.to(self.dev),c.to(self.dev),s_prov.to(self.dev),last_extr
+
+    def rescale_decisions_cyclicBC(self,d,c):
+
+        epsilon = self.OP_params_dict['max_charge']/10000
+
+        c_sum = torch.sum(c,dim=-1).unsqueeze(1) + epsilon
+        d_sum = torch.sum(d,axis=-1).unsqueeze(1) + epsilon
+
+        mask_overfull = c_sum > d_sum
+        mask_underempty = d_sum >= c_sum
+
+        c_rescaled = torch.where(mask_overfull,c*d_sum/c_sum,c)
+        d_rescaled = torch.where(mask_underempty,d*c_sum/d_sum,d)
+
+        return d_rescaled,c_rescaled
+
+    def restore_decisions_cyclicBC_greedy(self,d,c):
+
+        epsilon = self.OP_params_dict['max_charge']/10000
+
+        diff = torch.sum(c,dim=-1).unsqueeze(1) - torch.sum(d,axis=-1).unsqueeze(1)
+        len = diff.shape[0]
+
+        for i in range(len):
+            j=1
+            if diff[i] > epsilon:
+                while diff[i] > epsilon:
+                    correction = min(c[i,-j],diff[i]).item()
+                    diff[i] -= correction
+                    c[i,-j] -= correction
+                    j+=1
+            elif diff[i] < -epsilon:
+                while diff[i] < -epsilon:
+                    correction = min(d[i,-j],-diff[i]).item()
+                    diff[i] += correction
+                    d[i,-j] -= correction
+                    j+=1
+
+        return d,c
+
+    def restore_decisions_vectorized(self, d, c):
+        epsilon = self.OP_params_dict['max_charge'] / 1000
+        diff = torch.sum(c, dim=-1) - torch.sum(d, dim=-1)
+
+        # Ensure diff is at least 2D (N x 1) for broadcasting
+        diff = diff.unsqueeze(-1)
+
+        # Reverse tensors for backward cumulative operation
+        c_rev = c.flip(dims=[-1])
+        d_rev = d.flip(dims=[-1])
+
+        # Compute reverse cumulative sums to represent the total correction possible at each step
+        c_cum_rev = torch.cumsum(c_rev, dim=-1)
+        d_cum_rev = torch.cumsum(d_rev, dim=-1)
+
+        # Calculate masks based on diff
+        mask_c = (diff > epsilon) & (c_cum_rev - c_rev < diff)
+        mask_d = (diff < -epsilon) & (d_cum_rev - d_rev < -diff)
+
+        # Apply corrections where masks are True
+        correction_c_rev = torch.where(mask_c, c_rev, torch.tensor(0.0, device=c.device)).unsqueeze(-1)
+        correction_d_rev = torch.where(mask_d, d_rev, torch.tensor(0.0, device=d.device)).unsqueeze(-1)
+
+        # Avoid division by zero by adding a small epsilon to the denominator
+        safe_denom_c = torch.sum(correction_c_rev, dim=1) + 1e-8
+        safe_denom_d = torch.sum(correction_d_rev, dim=1) + 1e-8
+
+        correction_factor_c = (torch.sum(correction_c_rev,dim=1)-diff)/safe_denom_c
+        correction_factor_d = (torch.sum(correction_d_rev, dim=1) + diff) / safe_denom_d
+
+        c_rev = torch.where(mask_c,c_rev*correction_factor_c,c_rev)
+        d_rev = torch.where(mask_d,d_rev*correction_factor_d,d_rev)
+
+        c_corrected = c_rev.flip(dims=[-1])
+        d_corrected = d_rev.flip(dims=[-1])
+
+        return d_corrected, c_corrected
+
+    def constrain_decisions(self,s_prov_ts,d_ts,c_ts,soc_f=None):
+
+        if soc_f is None:
+            lim_high = self.OP_params_dict['max_soc']
+            lim_low = self.OP_params_dict['min_soc']
+        else:
+            lim_high = soc_f
+            lim_low = soc_f
+
+        mask_overfull = s_prov_ts > lim_high
+        mask_underempty = s_prov_ts < lim_low
+
+        c = torch.where(mask_overfull,c_ts-(s_prov_ts-lim_high),c_ts)
+        d = torch.where(mask_underempty,d_ts-(lim_low-s_prov_ts),d_ts)
+
+        return d,c
+
+    def get_opti_outcome(self,y_hat,fix_soc=True,smooth=True,to_torch=True):
+
+        if smooth:
+            solver = cp.ECOS
+        else:
+            solver = cp.ECOS
+
+        if isinstance(y_hat,list):
+            lambda_hat = y_hat[0]
+        else:
+            lambda_hat = y_hat
+
+        d = np.zeros_like(lambda_hat.cpu().detach().numpy())
+        c = np.zeros_like(lambda_hat.cpu().detach().numpy())
+        mu = np.zeros_like(lambda_hat.cpu().detach().numpy())
+
+        lambda_hat_np = lambda_hat.cpu().detach().numpy()
+
+        if smooth:
+            prob = self.op_sm
+            env={}
+        else:
+            prob = self.op_RN
+            env = {
+                "output_flag": 0
+            }
+
+        try:
+            _ = lambda_hat.size()[1]
+
+            for i in range(lambda_hat.size()[0]):
+
+                if fix_soc:
+                    prob.params[0].value = self.OP_params_dict['soc_0']
+                prob.params[1].value = lambda_hat_np[i, :]
+
+                try:
+                    prob.prob.solve(solver=solver,env=env)
+                except:
+                    prob.prob.solve(solver=cp.SCS)
+
+                d[i, :] = prob.vars[1].value
+                c[i, :] = prob.vars[2].value
+
+                for j in range(self.OP_params_dict['lookahead']):
+                    if j == 0:
+                        mu[i, j] = prob.constraints[6].dual_value[j]
+                    else:
+                        mu[i, j] = prob.constraints[7].dual_value[j]
+
+        except Exception as e:
+
+            print("An error occured in optimizing: ", e)
+
+            if isinstance(prob.params,list):
+                prob.params[0].value = self.OP_params_dict['soc_0']
+                prob.params[1].value = lambda_hat_np[:]
+            else:
+                prob.params.value = lambda_hat_np[:]
+
+            prob.op.solve(solver=solver)
+
+            list_keys = list(self.op.var_dict.keys())
+
+            d[:] = torch.from_numpy(self.op.var_dict[list_keys[0]].value)
+            c[:] = torch.from_numpy(self.op.var_dict[list_keys[1]].value)
+            mu[0] = self.op.constraints[6].dual_value[0]
+            for j in range(self.OP_params_dict['lookahead']):
+                if j == 0:
+                    mu[j] = self.op.constraints[6].dual_value[j]
+                else:
+                    mu[j] = self.op.constraints[7].dual_value[j]
+        #
+
+        if to_torch:
+            d = torch.tensor(d).to(self.dev)
+            c = torch.tensor(c).to(self.dev)
+            mu = torch.tensor(mu).to(self.dev)
+
+
+        return [d, c, mu]
 
 class NeuralNet(torch.nn.Module):
     def __init__(self, nn_params):
         super(NeuralNet, self).__init__()
 
-        self.input_feat = nn_params['input_feat']
-        self.output_dim = nn_params['output_dim']
-        self.list_units = nn_params['list_units']
-        self.list_act = nn_params['list_act']
+        self.input_feat = nn_params['input_size_d'] * nn_params['decoder_seq_length']
+        self.output_dim = nn_params['output_dim']*nn_params['decoder_seq_length']
+        self.list_units, self.list_act = limit_size_units_act(nn_params['list_units'], nn_params['list_act'])
+
+        self.dev = nn_params['dev']
 
         dict_act_fcts = {
             'relu': F.relu,
@@ -410,16 +1064,16 @@ class NeuralNet(torch.nn.Module):
 
         for i,units in enumerate(self.list_units):
             if i == 0:
-                self.hidden_layers.append(torch.nn.Linear(self.input_feat,units))
+                self.hidden_layers.append(torch.nn.Linear(self.input_feat,units).to(self.dev))
             else:
-                self.hidden_layers.append(torch.nn.Linear(self.list_units[i-1],units))
+                self.hidden_layers.append(torch.nn.Linear(self.list_units[i-1],units).to(self.dev))
 
             self.act_fcts.append(dict_act_fcts[self.list_act[i]])
 
         if len(self.list_units)>0:
-            self.final_layer = torch.nn.Linear(self.list_units[-1], self.output_dim)
+            self.final_layer = torch.nn.Linear(self.list_units[-1], self.output_dim).to(self.dev)
         else:
-            self.final_layer = torch.nn.Linear(self.input_feat, self.output_dim)
+            self.final_layer = torch.nn.Linear(self.input_feat, self.output_dim).to(self.dev)
 
     def forward(self, x):
 
@@ -693,8 +1347,8 @@ class LSTM_ED(torch.nn.Module):
         super(LSTM_ED, self).__init__()
         self.input_size_e = nn_params['input_size_e']  # input size
         self.input_size_d = nn_params['input_size_d']  # input size
-        self.layers_e = nn_params['layers_e']
-        self.layers_d = nn_params['layers_d']
+        self.layers_e = nn_params['layers']
+        self.layers_d = nn_params['layers']
         self.hidden_size_lstm = nn_params['hidden_size_lstm']  # hidden state
         self.output_dim = nn_params['output_dim']
         self.dev = nn_params['dev']
@@ -705,15 +1359,42 @@ class LSTM_ED(torch.nn.Module):
                                     batch_first=True,bidirectional=False).to(self.dev)  # Decoder
         self.fc = torch.nn.Linear(self.hidden_size_lstm, self.output_dim).to(self.dev) # fully connected 1
 
+        self.list_units,self.list_act = limit_size_units_act(nn_params['list_units'],nn_params['list_act'])
+
+
+
+        dict_act_fcts = {
+            'relu': F.relu,
+            'elu': F.elu,
+            'softplus': F.softplus
+        }
+
+        # Define layers
+
+        self.hidden_layers = torch.nn.ModuleList()
+        self.act_fcts = []
+
+        for i, units in enumerate(self.list_units):
+            if i == 0:
+                self.hidden_layers.append(torch.nn.Linear(self.hidden_size_lstm, units).to(self.dev))
+            else:
+                self.hidden_layers.append(torch.nn.Linear(self.list_units[i - 1], units).to(self.dev))
+
+            self.act_fcts.append(dict_act_fcts[self.list_act[i]])
+
+        if len(self.list_units) > 0:
+            self.final_layer = torch.nn.Linear(self.list_units[-1], self.output_dim).to(self.dev)
+        else:
+            self.final_layer = torch.nn.Linear(self.hidden_size_lstm, self.output_dim).to(self.dev)
 
     def forward(self, list_data,dev_type='NA'):
+        x_e = list_data[0]
+        x_d = list_data[1]
+
         if dev_type == 'NA':
             dev = self.dev
         else:
             dev = dev_type
-
-        x_e = list_data[0].to(dev)
-        x_d = list_data[1].to(dev)
 
         h_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
         c_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
@@ -722,68 +1403,26 @@ class LSTM_ED(torch.nn.Module):
 
 
         output_d, (h_d, c_d) = self.lstm_d(x_d, (h_e, c_e))
-        out = torch.squeeze(self.fc(output_d))  # Final Output
+
+        for i,act in enumerate(self.act_fcts):
+
+            output_d = act(self.hidden_layers[i](output_d))
+
+        out = torch.squeeze(self.final_layer(output_d))
         return out
 
-class LSTM_ED_sep(torch.nn.Module):
-    def __init__(self, nn_params):
 
-        super(LSTM_ED_sep, self).__init__()
-        self.input_size_e = nn_params['input_size_e']  # input size
-        self.input_size_d = nn_params['input_size_d']  # input size
-        self.layers_e = nn_params['layers_e']
-        self.layers_d = nn_params['layers_d']
-        self.hidden_size_lstm = nn_params['hidden_size_lstm']  # hidden state
-        self.output_dim = nn_params['output_dim']
-        self.dev = nn_params['dev']
 
-        self.encoders = torch.nn.ModuleList()
-        self.decoders = torch.nn.ModuleList()
-        self.fully_connected = torch.nn.ModuleList()
-
-        for i in range(self.output_dim):
-            self.encoders.append(
-                torch.nn.LSTM(input_size=self.input_size_e, hidden_size=self.hidden_size_lstm, num_layers=self.layers_e,
-                                    batch_first=True,bidirectional=False).to(self.dev)
-            )
-            self.decoders.append(torch.nn.LSTM(input_size=self.input_size_d, hidden_size=self.hidden_size_lstm, num_layers=self.layers_d,
-                                    batch_first=True,bidirectional=False).to(self.dev)
-            )
-            self.fully_connected.append(
-                torch.nn.Linear(self.hidden_size_lstm, 1).to(self.dev)
-            )
-
-    def forward(self, list_data,dev_type='NA'):
-        if dev_type == 'NA':
-            dev = self.dev
-        else:
-            dev = dev_type
-
-        x_e = list_data[0].to(dev)
-        x_d = list_data[1].to(dev)
-
-        h_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # hidden state
-        c_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)  # internal state
-        # Propagate input through LSTM
-        list_out = []
-
-        for i in range(self.output_dim):
-            out_e,(h_e,c_e) = self.encoders[i](x_e,(h_0,c_0))
-            out_d, _ = self.decoders[i](x_d,(h_e,c_e))
-            out_fc = torch.squeeze(self.fully_connected[i](out_d))
-            list_out.append(out_fc)
-
-        out = torch.stack(list_out,dim=2)
-        return out
 
 class Attention(nn.Module):
     def __init__(self, hidden_size,dev):
         super(Attention, self).__init__()
         self.hidden_size = hidden_size
-        self.dev = dev
-        self.attn = nn.Linear(hidden_size * 2, hidden_size).to(dev)
-        self.v = nn.Parameter(torch.rand(hidden_size)).to(dev)
+        self.attn = nn.Linear(hidden_size * 2, hidden_size)
+        self.v = nn.Parameter(torch.rand(hidden_size))
         self.v.data.normal_(mean=0, std=1. / hidden_size**0.5)
+
+        self.to(dev)
 
     def forward(self, hidden, encoder_outputs):
         seq_len = encoder_outputs.size(1)
@@ -804,26 +1443,26 @@ class Attention(nn.Module):
 class LSTM_ED_Attention(nn.Module):
     def __init__(self, nn_params):
         super(LSTM_ED_Attention, self).__init__()
+        self.nn_params = nn_params
         self.input_size_e = nn_params['input_size_e']  # input size
         self.input_size_d = nn_params['input_size_d']  # input size
-        self.layers_e = nn_params['layers_e']
-        self.layers_d = nn_params['layers_d']
+        self.layers_e = nn_params['layers']
+        self.layers_d = nn_params['layers']
         self.hidden_size_lstm = nn_params['hidden_size_lstm']  # hidden state
         self.output_dim = nn_params['output_dim']
         self.dev = nn_params['dev']
-        #self.seq_length_e = nn_params['seq_length_e']
-        #self.seq_length_d = nn_params['seq_length_d']
+        self.do = nn_params['dropout']
+
+        self.dropout = torch.nn.Dropout(self.do)
 
         self.lstm_e = nn.LSTM(input_size=self.input_size_e, hidden_size=self.hidden_size_lstm, num_layers=self.layers_e,
-                              batch_first=True, bidirectional=False).to(self.dev)  # Encoder
+                              batch_first=True, bidirectional=False,dropout=self.do).to(self.dev)  # Encoder
         self.lstm_d = nn.LSTM(input_size=self.input_size_d+self.hidden_size_lstm, hidden_size=self.hidden_size_lstm, num_layers=self.layers_d,
-                              batch_first=True, bidirectional=False).to(self.dev)  # Decoder
+                              batch_first=True, bidirectional=False,dropout=self.do).to(self.dev)  # Decoder
         self.attention = Attention(self.hidden_size_lstm,self.dev)
 
 
-        self.list_units = nn_params['list_units']
-        self.list_act = nn_params['list_act']
-
+        self.list_units, self.list_act = limit_size_units_act(nn_params['list_units'], nn_params['list_act'])
 
         dict_act_fcts = {
             'relu': F.relu,
@@ -862,25 +1501,41 @@ class LSTM_ED_Attention(nn.Module):
         c_0 = Variable(torch.zeros(self.layers_e, x_e.size(0), self.hidden_size_lstm)).to(dev)
         encoder_outputs, (h_e, c_e) = self.lstm_e(x_e, (h_0, c_0)) #dim encoder_outputs: [bs,la,hidden]
 
+        encoder_outputs = self.dropout(encoder_outputs)
+
         # Attention mechanism
         attn_weights = self.attention(h_e, encoder_outputs) #dim attn_weights: [bs,la]
         context = attn_weights.bmm(encoder_outputs)  # dim context: [bs,1,hidden]
         context = context.repeat(1, x_d.size(1), 1)
+
+        context = self.dropout(context)
 
         # Concatenate the context vector with the decoder input
         x_d = torch.cat([x_d, context], dim=2)
 
         output_d, (h_d, c_d) = self.lstm_d(x_d, (h_e, c_e))
 
+        output_d = self.dropout(output_d)
+
         for i,act in enumerate(self.act_fcts):
 
             output_d = act(self.hidden_layers[i](output_d))
+            output_d = self.dropout(output_d)
 
         out = torch.squeeze(self.final_layer(output_d))
 
-
-
         return out
+
+    def set_device(self,dev):
+        self.dev = dev
+        self.lstm_e.to(dev)
+        self.lstm_d.to(dev)
+        for l in self.hidden_layers:
+            l.to(dev)
+
+        self.attention.to(dev)
+        self.attention.v = nn.Parameter(self.attention.v.data.to(dev))
+        self.final_layer.to(dev)
 
 
 class ED_Transformer(nn.Module):
@@ -892,7 +1547,7 @@ class ED_Transformer(nn.Module):
         self.decoder_size = nn_params['encoder_size']
         self.encoder_size = nn_params['encoder_size']
         self.num_heads = nn_params['num_heads']
-        self.num_layers = nn_params['num_layers']
+        self.num_layers = nn_params['layers']
         self.ff_dim = nn_params['ff_dim']
         self.dropout = nn_params['dropout']
         self.dev = nn_params['dev']
@@ -929,6 +1584,18 @@ class ED_Transformer(nn.Module):
         decoder_output = self.transformer_decoder(decoder_input, encoder_output)
 
         # Apply fully connected layer for final prediction
-        output = self.fc(decoder_output)
+        output = torch.squeeze(self.fc(decoder_output))
 
         return output
+
+
+
+
+#Overarching functions
+
+def limit_size_units_act(units,act_fcts):
+
+    cut_len = min(len(units),len(act_fcts))
+
+    return units[0:cut_len],act_fcts[0:cut_len]
+

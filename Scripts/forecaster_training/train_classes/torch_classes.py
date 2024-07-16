@@ -16,10 +16,7 @@ import numpy as np
 import cvxpy as cp
 import copy
 from cvxpylayers.torch import CvxpyLayer
-#from functions_support import opti_problem_mu
-#from model import Storage_model
-
-
+from functions_support import opti_problem_mu
 
 
 
@@ -101,6 +98,157 @@ class Loss(nn.Module):
 
         return loss
 
+class LossNew(nn.Module):
+
+    def __init__(self,params):
+        super(LossNew, self).__init__()
+        assert params['type'] in ['profit','profit_first','mse','mse_first','mse_weighted_profit','mse_first_weighted_profit','mae','mse_weighted','pinball','generalized'], f"{params['type']} is an unsupported loss type"
+        #self.loss_str = params['loss_str']
+
+        self.type = params['type']
+        self.params = params
+        #self.requires_mu = self.determine_mu_required()
+        if self.type == 'generalized':
+            self.weights = self.calculate_weights(params)
+
+    # def determine_mu_required(self):
+    #     if self.loss_str in ['mse_mu']:
+    #         return True
+    #     else:
+    #         return False
+
+    def calculate_weights(self,params):
+        decay_n = params['decay_n']
+        decay_k = params['decay_k']
+        la = params['la']
+
+        weights = np.ones((la,la))
+
+        for n in range(la):
+            for k in range(la-n):
+                weights[n,k]*=(np.exp(-decay_n*n)*np.exp(-decay_k*k))
+                if k == 0: #This resets the balance between regular loss and variability if params['rel_importance_var] == 1
+                    weights[n,k] *= (la-1)/2
+                else:
+                    weights[n,k] *= params['rel_importance_var']
+
+        return torch.tensor(weights)
+
+    def forward(self,preds,labels):
+
+        if self.type == 'profit':
+            loss = self.calc_profit(preds,labels)
+        elif self.type == 'profit_first':
+            loss = self.calc_profit(preds,labels,first=True)
+        elif self.type == 'mse':
+            loss = self.calc_mse(preds,labels)
+        elif self.type == 'mse_weighted_profit':
+            loss = self.calc_mse_weighted_profit(preds,labels)
+        elif self.type == 'mse_first':
+            loss = self.calc_mse(preds,labels,first=True)
+        elif self.type == 'mse_first_weighted_profit':
+            loss = self.calc_mse_weighted_profit(preds,labels,first=True)
+        elif self.type == 'mae':
+            loss = self.calc_mae(preds,labels)
+        elif self.type == 'mse_weighted':
+            loss = self.calc_mse_weighted(preds,labels)
+        elif self.type == 'pinball':
+            loss = self.calc_pinball(preds,labels)
+        elif self.type == 'generalized':
+            loss = self.calc_generalized_loss(preds,labels)
+
+        return loss
+
+    def calc_profit(self,preds,labels,first=False):
+        if first:
+            return -torch.sum(torch.mul(preds[self.params['loc_preds']][:,0], labels[self.params['loc_labels']][:,0]))
+        else:
+            return -torch.sum(torch.mul(preds[self.params['loc_preds']], labels[self.params['loc_labels']]))
+
+    def calc_mse(self,preds,labels,first=False):
+        if first:
+            return torch.mean(torch.square(preds[self.params['loc_preds']]-labels[self.params['loc_labels']])[:,0])
+        else:
+            return torch.mean(torch.square(preds[self.params['loc_preds']]-labels[self.params['loc_labels']]))
+
+    def calc_mse_weighted_profit(self,preds,labels,first=False):
+        profit_weights = torch.sum(torch.multiply(labels[0], labels[1]), axis=1)
+
+        if first:
+            mse_first = torch.square(preds[self.params['loc_preds']]-labels[self.params['loc_labels']])[:,0]
+            mse_first_weighted = torch.multiply(profit_weights,mse_first)
+            return torch.mean(mse_first_weighted)
+        else:
+            mse = torch.square(preds[self.params['loc_preds']]-labels[self.params['loc_labels']])
+            mse_weighted = torch.multiply(profit_weights.unsqueeze(1),mse)
+            return torch.mean(mse_weighted)
+
+
+    def calc_mae(self,preds,labels):
+        return torch.mean(torch.abs(preds[self.params['loc_preds']]-labels[self.params['loc_labels']]))
+
+    def calc_mse_weighted(self,preds,labels):
+        return torch.sum(torch.sum(torch.square(preds[self.params['loc_preds']]-labels[self.params['loc_labels']]),axis=1)*self.params['weights'])
+
+    def calc_pinball(self,preds,labels):
+        diff = labels[self.params['loc_labels']] - preds[self.params['loc_preds']]
+        mask_pos = diff >= 0
+        diff_pos = torch.mul(mask_pos, diff)
+        diff_neg = torch.mul(~mask_pos, diff)
+        pinball_pos = torch.mul(diff_pos, self.params['quantile_tensor'])
+        pinball_neg = torch.mul(diff_neg, 1 - self.params['quantile_tensor'])
+
+        return torch.mean(torch.sum(pinball_pos - pinball_neg,axis=2))
+
+    def calc_generalized_loss(self,preds,labels):
+        y_pred = preds[self.params['loc_preds']]
+        y_true = labels[self.params['loc_labels']]
+
+        [n_examples,len_pred] = y_true.size()
+        abs_diff = torch.zeros(n_examples,len_pred,len_pred)
+
+        abs_diff[:,:,0] = torch.abs(y_true-y_pred)
+
+        for n in range(len_pred-1):
+            abs_diff[:,0:len_pred-n-1,n+1] = torch.abs((y_true[:,0:len_pred-n-1] - y_true[:,n+1:]) - (y_pred[:,0:len_pred-n-1] - y_pred[:,n+1:]))
+
+        loss = torch.sum(torch.pow(torch.mul(self.weights,abs_diff),self.params['p']))
+
+        return loss/len_pred/n_examples
+
+class LossFeasibilitySoc(nn.Module):
+
+    def __init__(self,OP_params,training_params):
+        super(LossFeasibilitySoc, self).__init__()
+        self.soc_min = OP_params['min_soc']
+        self.soc_0 = OP_params['soc_0']
+        self.soc_max = OP_params['max_soc']
+        try:
+            self.pen = training_params['pen_feasibility']
+        except:
+            print('Feasibility penalty not defined, setting it to 0.')
+            self.pen=0
+
+    def forward(self,schedule, soc_0=None):
+
+        d = schedule[0]
+        c = schedule[1]
+
+        soc = torch.zeros_like(schedule[0])
+
+        soc[:,0] = self.soc_0 + c[:,0] - d[:,0]
+        for i in range(soc.shape[1]-1):
+            soc[:,i+1] = soc[:,i] + c[:,i+1] - d[:,i+1]
+
+        mask_full = soc > self.soc_max
+        mask_empty = soc < self.soc_min
+
+        feas_penalty_full = self.pen * torch.sum(torch.mul(mask_full, soc-self.soc_max))
+        feas_penalty_empty = self.pen * torch.sum(torch.mul(mask_empty, self.soc_min-soc))
+
+        return feas_penalty_full + feas_penalty_empty
+
+
 
 """ 
 Basic unidirectional encoder-decoder without attention. 
@@ -149,6 +297,12 @@ class LSTM_ED(torch.nn.Module):
         output_d, (h_d, c_d) = self.lstm_d(x_d, (h_e, c_e))
         out = torch.squeeze(self.fc(output_d))  # Final Output
         return out
+
+    def set_device(self,dev):
+        self.dev = dev
+        self.lstm_e.to(dev)
+        self.lstm_d.to(dev)
+        self.fc.to(dev)
 
 
 """
@@ -230,6 +384,8 @@ class LSTM_ED_Attention(torch.nn.Module):
         # Fully connected layer for the final output
         self.fc = torch.nn.Linear(hidden_size_lstm, output_dim).to(dev)
 
+
+
     def forward(self, list_data, dev_type='NA'):
         """
         Forward propagate the model.
@@ -273,6 +429,10 @@ class LSTM_ED_Attention(torch.nn.Module):
         out = torch.squeeze(self.fc(output_d))
         return out
 
+
+
+
+
 """
 Bi-attention, supposedly as translated by chatgpt from the tf code of Jeremie to torch code
 """
@@ -280,7 +440,6 @@ Bi-attention, supposedly as translated by chatgpt from the tf code of Jeremie to
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 
 class EncoderRNN(nn.Module):
     def __init__(self, input_size_ctxt, input_size_temp, hidden_size):
@@ -297,7 +456,6 @@ class EncoderRNN(nn.Module):
         combined = torch.cat((embedded_ctxt, embedded_temp), 2)
         output, hidden = self.gru(combined)
         return output, hidden
-
 
 class BiAttention(nn.Module):
     def __init__(self, hidden_size):
@@ -318,7 +476,6 @@ class BiAttention(nn.Module):
         combined = torch.cat((hidden, encoder_output), 2)
         energy = self.attn(combined)
         return torch.sum(self.v * torch.tanh(energy), dim=2)
-
 
 class DecoderRNN(nn.Module):
     def __init__(self, input_size_ctxt, input_size_temp, output_size, hidden_size):
@@ -362,8 +519,6 @@ class DecoderRNN(nn.Module):
 #     encoder_outputs, encoder_hidden = encoder(past_ctxt, past_temp)
 #     decoder_output, decoder_hidden = decoder(fut_ctxt, fut_temp, encoder_outputs)
 #     # Compute loss, backpropagate, update weights, etc.
-
-
 
 
 """ Classes for training with optimization """
@@ -513,9 +668,6 @@ class NeuralNetWithOpti_new():
                 elif self.reg_type == 'abs':
                     reg += torch.sum(torch.abs(p))
         return self.reg_val*reg
-
-
-
 
 
 ##### CLASSES FOR SELF-DEFINING THE GRADIENT ####
@@ -711,7 +863,7 @@ class Schedule_Calculator():
             self.mu_calculator.set_dev("cpu")
             #Fix the mu_calculator, i.e. don't allow it to get updated in the training process
             for param in self.mu_calculator.parameters():
-                param.requires_grad=False
+                param.requires_grad=True
 
     def __call__(self,y_hat):
 
@@ -878,12 +1030,3 @@ class Schedule_Calculator():
 
 
         return mu,d,c
-
-
-
-
-
-
-
-
-
