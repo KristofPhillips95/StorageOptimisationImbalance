@@ -5,6 +5,8 @@ import numpy as np
 import os
 import pickle
 
+test = 1
+
 torch.set_num_threads(1)
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
