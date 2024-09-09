@@ -2,6 +2,7 @@ import sys
 import math
 import torch
 import numpy as np
+from datetime import datetime
 import os
 import pickle
 
@@ -13,6 +14,9 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 train_classes_dir = os.path.join(current_dir,'..','train_classes')
 data_processing_dir = os.path.join(current_dir,'..','data','scripts_preprocessing')
 data_load_dir = os.path.join(current_dir,'..','data','scripts_data_loading')
+old_dir = os.path.join(current_dir,'..','..','train_SI_forecaster')
+
+sys.path.insert(0,old_dir)
 sys.path.insert(0,data_processing_dir)
 sys.path.insert(0,train_classes_dir)
 sys.path.insert(0,data_load_dir)
@@ -25,6 +29,8 @@ import load_data as ld
 import torch_classes as tc
 import opti_problem
 import nn_with_opti as nnwo
+import functions_data_preprocessing as fdp
+
 
 def add_soc0_features(data, OP_params, dev):
     for key in data:
@@ -227,15 +233,15 @@ if __name__ == '__main__':
     sensitivity = False
     test_WS = False
 
-    fw = 'GS_proxy' #'ID', 'GS_proxy', 'proxy_direct' or 'proxy_direct_linear'
+    fw = 'NA' #'NA', 'ID', 'GS_proxy', 'proxy_direct' or 'proxy_direct_linear'
     smoothing = 'piecewise' #'quadratic' or 'logBar', 'quadratic_symm' , 'piecewise'
-    loss_fct = 'p' #'p' for profit, 'm' for MSE of schedule, 'm1' for MSE on first instance of schedule, 'mw' for MSE of schedule weighted with PF profit, 'm1w' for MSE on first instance of schedule weighted with PF profit
+    loss_fct = 'mse' #'p' for profit, 'm' for MSE of schedule, 'm1' for MSE on first instance of schedule, 'mw' for MSE of schedule weighted with PF profit, 'm1w' for MSE on first instance of schedule weighted with PF profit
     #this only has impact when MPC = True, otherwise loss_fct = profit
     MPC = True
     EP = 4
     manyGamma = False
     indepthLoss = False
-    warmStart = 'MSE' #'MSE', 'LT' or 'cold'
+    warmStart = 'cold' #'MSE', 'LT' or 'cold'
     #config = 44 #4->44; 8->55; 12->62; 24->62
     del_models = True
     repair_list = ["nn","ns","gg"]
@@ -249,7 +255,7 @@ if __name__ == '__main__':
     loc = "../data/processed_data/SPO_DA/X_df_ds.csv"
     #save_loc = f"train_output/20240528_DA_EP{EP}_eff90_{fw}_{smoothing}_{dict_choices['indepthstr']}_{warmStart}_{dict_choices['gammastr']}_repair{dict_choices['repair_str']}/"
     save_loc = f"train_output_MPC/20240619_MSE_4/"
-    makedir = True
+    makedir = False
     overwrite_OP_params_proxy = False #CHECK WHAT THE HELL HAPPENS IF YOU TAKE TRUE
 
 
@@ -346,7 +352,7 @@ if __name__ == '__main__':
         'makedir': makedir,
         'feasibility_loss': False,
         'keep_prices_train': True,
-        'keep_sched_train': True,
+        'keep_sched_train': False,
     }
 
 
@@ -367,20 +373,70 @@ if __name__ == '__main__':
         'decoder_seq_length': la,
     }
 
-    if training_dict['MPC']:
-        data_np, data = ld.load_data_MPC(la=la,lb=lb,dev=dev,limit_train_set=5000)
+    #New way of loading data:
 
-    else:
-        data_np, data = ld.load_data_DA(days_train=1000, last_ex_test=365, dev=dev)
+    # if training_dict['MPC']:
+    #     data_np, data = ld.load_data_MPC(la=la,lb=lb,dev=dev,limit_train_set=5000)
+    # else:
+    #     data_np, data = ld.load_data_DA(days_train=1000, last_ex_test=365, dev=dev)
+
+    # Old way of loading data:
+
+    data_dict = {
+        'data_file_loc': "../../data_preprocessing/data_scaled.h5",
+        'read_cols_past_ctxt': ['SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc'],
+        'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
+        'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
+        'target_col': 'SI', #Before: "Frame_SI_norm"
+        'datetime_from': datetime(2018,1,1,0,0,0),
+        'datetime_to': datetime(2022,1,1,0,0,0),
+        'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
+        'tvt_split': [2/4,1/4,1/4],
+        'lookahead': la,
+        'lookback': lb,
+        'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
+        'loc_scaler': "../../scaling/Scaling_values.xlsx",
+        "unscale_labels":True,
+    }
+
+    df_past_ctxt = fdp.read_data_h5(input_dict=data_dict, mode='past')  # .drop(["FROM_DATE"],axis=1)
+    df_fut_ctxt = fdp.read_data_h5(input_dict=data_dict, mode='fut')  # .drop(["FROM_DATE"],axis=1)
+    df_temporal = fdp.get_temporal_information(data_dict)
+
+    array_past_ctxt = df_past_ctxt.to_numpy()
+    array_fut_ctxt = df_fut_ctxt.to_numpy()
+    array_temp = df_temporal.to_numpy()
+
+    # Extend arrays (for RNN input)
+    array_ext_past_ctxt, array_ext_fut_ctxt, array_ext_past_temp, array_ext_fut_temp = fdp.get_3d_arrays(
+        past_ctxt=array_past_ctxt, fut_ctxt=array_fut_ctxt, temp=array_temp, input_dict=data_dict)
+    labels_ext = fdp.get_3d_arrays_labels(labels=df_past_ctxt, input_dict=data_dict)
+
+    array_ext_past = np.concatenate((array_ext_past_ctxt, array_ext_past_temp), axis=2)
+    array_ext_fut = np.concatenate((array_ext_fut_ctxt, array_ext_fut_temp), axis=2)
+
+    feat_train, feat_val, feat_test = fdp.get_train_val_test_arrays([array_ext_past, array_ext_fut], data_dict)
+    lab_train, lab_val, lab_test = fdp.get_train_val_test_arrays([labels_ext], data_dict)
+    # list_arrays = [feat_train,lab_train,feat_val,lab_val,feat_test,lab_test]
+
+    data_np = {
+        'train': (feat_train,lab_train),
+        'val': (feat_val,lab_val),
+        'test': (feat_test, lab_test)
+    }
+
+    data = {
+        'train': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_train],
+                  [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_train]),
+        'val': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_val],
+                [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_val]),
+        'test': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_test],
+                 [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_test]),
+    }
+
 
     data_dict = {}
 
-
-    # data = {
-    #     'train': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in features[0]], [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in labels[0]]),
-    #     'val': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in features[1]], [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in labels[1]]),
-    #     'test': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in features[2]], [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in labels[2]]),
-    # }
 
     nn_dict['input_size_e'] = data_np['train'][0][0].shape[2]
     nn_dict['input_size_d'] = data_np['train'][0][1].shape[2]
@@ -422,19 +478,6 @@ if __name__ == '__main__':
         data = add_schedule_labels_2(data,OP_params_dict,dev)
 
 
-
-    # loss_check = {
-    #     'type': 'generalized',
-    #     'decay_n':0,
-    #     'decay_k': 0,
-    #     'p': 1.75,
-    #     'la': la,
-    #     'rel_importance_var':2,
-    #     'loc_preds': 0,
-    #     'loc_labels': 0
-    # }
-    # loss_check = tc.LossNew(loss_check)
-    # training_dict['loss_check'] = loss_check
 
 
     #Init loss fct application

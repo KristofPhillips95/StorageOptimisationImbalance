@@ -118,7 +118,7 @@ def load_data_MPC(la,lb,dev,limit_train_set=None):
         'dev': dev,
         'adjust_alpha': False,
         #'loc_scaler': "../data_preprocessing/scaling/Scaling_values.xlsx",
-        'loc_scaler': os.path.join(current_dir, '..', '..', 'data_preprocessing', 'Scaling_values.xlsx'),
+        'loc_scaler': os.path.join(current_dir, '..', '..', '..', 'scaling', 'Scaling_values.xlsx'),
         "unscale_labels": True,
     }
 

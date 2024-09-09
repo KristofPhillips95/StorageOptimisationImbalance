@@ -37,7 +37,7 @@ if __name__ == '__main__':
         'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
         'target_col': 'SI', #Before: "Frame_SI_norm"
         'datetime_from': datetime(2018,1,1,0,0,0),
-        'datetime_to': datetime(2022,1,1,0,0,0),
+        'datetime_to': datetime(2018,2,1,0,0,0),
         'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
         'tvt_split': [2/4,1/4,1/4],
         'lookahead': la,
@@ -68,7 +68,9 @@ if __name__ == '__main__':
     lab_train,lab_val,lab_test = fdp.get_train_val_test_arrays([labels_ext],data_dict)
     #list_arrays = [feat_train,lab_train,feat_val,lab_val,feat_test,lab_test]
 
-    OP_params_dict = {}
+    OP_params_dict = {
+        'overwrite_from_proxy': False,
+    }
 
     dict_hps = {
         'hidden_size_lstm': [32],
@@ -81,26 +83,47 @@ if __name__ == '__main__':
         'list_act': [['relu']],
         'encoder_size': [64,128],
         'num_heads': [4],
-        'num_layers': [2,4],
+        'layers': [2,4],
         'ff_dim': [128,512],
         'dropout': [0.1],
+        'framework': ['NA'],
+        'repair': ['nn'],
+        'warm_start': [None],
+        'quantile_tensor': [torch.tensor(data_dict['list_quantiles']).to(dev)]
     }
 
     hp_trans = {
         # Dictionary accompanying dict_hps and assigning the HPs to a specific state dictionary in a Train_model object
-        'reg': 'train',
-        'batch_size': 'train',
-        'lr': 'train',
-        'loss_fct_str': 'train',
-        'layers_lstm': 'nn',
-        'hidden_size_lstm': 'nn',
-        'list_units': 'nn',
-        'list_act': 'nn',
-        'encoder_size': 'nn',
-        'num_heads': 'nn',
-        'num_layers': 'nn',
-        'ff_dim': 'nn',
-        'dropout': 'nn',
+        'type': ['nn'],
+        'reg': ['train'],
+        'batch_size': ['train'],
+        'add_seed': ['OP_params'],
+        'warm_start': ['train','nn'],
+        'gamma': ['OP_params'],
+        'include_soc_smoothing': ['OP_params'],
+        #'repair_proxy_feasibility': ['OP_params'],
+        'repair': ['OP_params'],
+        'lr': ['train'],
+        'loss_fct_str': ['train'],
+        'smoothing': ['OP_params'],
+        'framework': ['train'],
+        'list_units': ['nn'],
+        'list_act': ['nn'],
+        'hidden_size_lstm': ['nn'],
+        'layers': ['nn'],
+        'dropout': ['nn'],
+        'ff_dim': ['nn'],
+        'encoder_size': ['nn'],
+        'decay_n': ['loss'],
+        'decay_k': ['loss'],
+        'p': ['loss'],
+        'pen_feasibility': ['train'],
+        'hidden_size_lstm': ['nn'],
+        'layers_lstm': ['nn'],
+        'encoder_size': ['nn'],
+        'num_heads': ['nn'],
+        'ff_dim': ['nn'],
+        'quantile_tensor': ['loss']
     }
 
     training_dict = {
@@ -111,10 +134,14 @@ if __name__ == '__main__':
         'reg_type': 'quad',  # 'quad' or 'abs',
         'loss_fct_str': 'pinball',  # loss function that will be used to calculate gradients
         'loss_fcts_eval_str': ['pinball'],  # loss functions to be tracked during training procedure
-        'loss_params': {'quantile_tensor': torch.tensor(data_dict['list_quantiles']).to(dev)},
+        'loss_params': {},
         'exec': 'seq',  # 'seq' or 'par'
-        'makedir': True,
-        'framework': 'NA' #Smoothing framework
+        'makedir': False,
+        'framework': 'NA', #Smoothing framework,
+        'la': la,
+        'include_loss_evol_smooth': False,
+        'keep_prices_train': False,
+        'keep_sched_train': False
     }
 
     nn_dict = {

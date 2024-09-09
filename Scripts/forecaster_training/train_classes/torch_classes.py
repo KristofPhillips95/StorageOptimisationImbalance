@@ -3,9 +3,9 @@ import sys
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
-experiment_dir = os.path.join(current_dir, '..', '..', 'experiment')
+training_dir = os.path.join(current_dir, '..')
 ml_proxy_dir = os.path.join(current_dir, '..', '..', 'ML_proxy')
-sys.path.insert(0,experiment_dir)
+sys.path.insert(0,training_dir)
 sys.path.insert(0,ml_proxy_dir)
 
 import torch

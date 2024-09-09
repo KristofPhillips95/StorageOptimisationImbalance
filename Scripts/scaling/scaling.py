@@ -1,5 +1,6 @@
 import pandas as pd
 import h5py
+import os
 
 def scale_data(df=None,loc=None,ks=None):
 
@@ -116,12 +117,17 @@ class Scaler():
         self.dict_col_scaling_values = self.get_dict_col_scaling()
         self.dict_cols = self.get_dict_cols()
         self.dict_col_rename = self.get_dict_col_rename()
-        self.df_scaling = pd.read_excel(loc_scaling_values)
+        if os.path.isfile(loc_scaling_values):
+            self.df_scaling = pd.read_excel(loc_scaling_values)
+        else:
+            self.df_scaling = pd.read_excel('../'+loc_scaling_values)
 
     def get_dict_col_scaling(self):
         dict_col_scaling_values = {
             "ACE": "ACE",
             "SI": "ACE",
+            "Imb_price": "Imb_price",
+            "alpha": "Imb_price",
             "PV_fc": "PV",
             "PV_act": "PV",
             "wind_fc": "W_total",

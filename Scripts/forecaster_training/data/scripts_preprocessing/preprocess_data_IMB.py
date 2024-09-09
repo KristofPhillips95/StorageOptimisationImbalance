@@ -6,7 +6,7 @@ import h5py
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 data_preprocessing_dir = os.path.join(current_dir, '..', '..', '..', 'data_preprocessing')
-scaling_dir = os.path.join(data_preprocessing_dir, 'scaling')
+scaling_dir = os.path.join(data_preprocessing_dir, '..', 'scaling')
 train_class_dir = os.path.join(current_dir, '..', '..', 'train_classes')
 sys.path.insert(0,data_preprocessing_dir)
 sys.path.insert(0,scaling_dir)
