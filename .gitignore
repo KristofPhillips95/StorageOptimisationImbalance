@@ -1,7 +1,11 @@
 
 Scripts/__pycache__/
+
 Scripts/train_SI_forecaster/output/trained_models/
+
 Scripts/forecaster_training/SI/output/trained_models/
+
+Scripts/forecasting_SI_imbPrice/data/processed_data/
 
 .idea/
 
