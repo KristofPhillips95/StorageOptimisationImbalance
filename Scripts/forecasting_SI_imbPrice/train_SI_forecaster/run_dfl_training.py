@@ -29,7 +29,6 @@ import load_data as ld
 import torch_classes as tc
 import opti_problem
 import nn_with_opti as nnwo
-import functions_data_preprocessing as fdp
 
 
 def add_soc0_features(data, OP_params, dev):
@@ -69,163 +68,6 @@ def add_schedule_labels_2(data,params,dev):
 
     return data
 
-def get_dict_choices(fw,smoothing,loss_fct,MPC,indepthLoss,warmStart,EP,manyGamma,repair_list,test_WS):
-
-    dict_choices = {
-        'fw': fw,
-        'smoothing': smoothing,
-        #'config': config,
-        'indepthLoss': indepthLoss
-    }
-
-    if fw == 'ID':
-        if manyGamma:
-            dict_choices['include_soc_smoothing'] = [False]
-        else:
-            dict_choices['include_soc_smoothing'] = [True,False]
-        dict_choices['repair_feas'] = [True]
-    elif fw in ['GS_proxy', 'proxy_direct', 'proxy_direct_linear']:
-        dict_choices['include_soc_smoothing'] = [False]
-
-        if manyGamma:
-            dict_choices['repair_feas'] = [True]
-        else:
-            dict_choices['repair_feas'] = [True,False]
-    else:
-        ValueError(f'{fw} unsupported framework')
-
-    if fw == 'proxy_direct':
-        dict_choices['gamma'] = [1/4,1/2,2/3,3/4,1,4/3,3/2,2,4]
-        dict_choices['smoothing_fct'] = [smoothing]
-    elif fw == 'proxy_direct_linear':
-        dict_choices['gamma'] = [1/4]
-        dict_choices['smoothing_fct'] = [smoothing]
-
-    else:
-
-        if smoothing in ['quadratic','quadratic_symm', 'piecewise']:
-            if manyGamma:
-                dict_choices['gamma'] = [0.001,0.003, 0.01, 0.03, 0.1, 0.3,1,3,10,30,100,300]
-            else:
-                dict_choices['gamma'] = [0.1,0.3,1,3,10,30]
-            dict_choices['smoothing_fct'] = [smoothing]
-
-        elif smoothing == 'logBar':
-            if manyGamma:
-                dict_choices['gamma'] = [0.001,0.003, 0.01, 0.03, 0.1, 0.3,1,3,10,30,100,300]
-            else:
-                dict_choices['gamma'] = [0.003,0.01,0.03,0.1,0.3,1]
-            dict_choices['smoothing_fct'] = ['logBar']
-
-        else:
-            ValueError(f'{smoothing} unsupported smoothing')
-
-    if MPC:
-        if warmStart == 'MSE':
-            if EP == 1:
-                dict_choices['warmStart'] = [f'../pre_training/train_output_imbPrice/20240508_EP1_CBC/config_21']
-            elif EP == 4:
-                dict_choices['warmStart'] = [f'../pre_training/train_output_imbPrice/20240508_EP4_CBC/config_3']
-        elif warmStart == 'LT':
-                #dict_choices['warmStart'] = [f'../pre_training/train_output_imbPrice/20240325_CBC_EP1/config_34']
-                if EP == 1:
-                    dict_choices['warmStart'] = [f'../pre_training/train_output_imbPrice/20240508_EP1_CBC/config_20']
-                elif EP == 4:
-                    dict_choices['warmStart'] = [f'../pre_training/train_output_imbPrice/20240508_EP4_CBC/config_28']
-
-        elif warmStart == 'cold':
-            dict_choices['warmStart'] = [False]
-        else:
-            ValueError(f"{warmStart} unsupported warm start")
-    else:
-        if warmStart == 'MSE':
-                dict_choices['warmStart'] = ['../pre_training/train_output/20240415_MSE_2/config_11']
-        elif warmStart == 'LT':
-                dict_choices['warmStart'] = ['../pre_training/train_output/20240411_EP4_generalizedLoss_1000_128/config_44']
-        elif warmStart == 'cold':
-            dict_choices['warmStart'] = [False]
-        else:
-            ValueError(f"{warmStart} unsupported warm start")
-
-    if manyGamma:
-        dict_choices['gammastr'] = 'manyGamma'
-    else:
-        dict_choices['gammastr'] = 'redGamma'
-
-    if indepthLoss:
-        dict_choices['loss_fcts'] = ['profit','mse_price','mse_sched','mse_sched_sm','mse_mu']
-        dict_choices['indepthstr'] = 'inDepth'
-    else:
-        dict_choices['loss_fcts'] = ['profit','mse_price']
-        dict_choices['indepthstr'] = 'fast'
-
-    if MPC:
-        #dict_choices['loss_fcts']+= ['mse_sched_first','mse_sched', 'mse_sched_weighted_profit', 'mse_sched_first_weighted_profit']
-
-
-        if loss_fct == 'm':
-            dict_choices['loss_fct'] = ['mse_sched']
-        elif loss_fct == 'p':
-            dict_choices['loss_fct'] = ['profit']
-        elif loss_fct == 'm1':
-            dict_choices['loss_fct'] = ['mse_sched_first']
-        elif loss_fct == 'mw':
-            dict_choices['loss_fct'] = ['mse_sched_weighted_profit']
-        elif loss_fct == 'm1w':
-            dict_choices['loss_fct'] = ['mse_sched_first_weighted_profit']
-
-    else:
-        dict_choices['loss_fct'] = ['profit']
-
-
-    if MPC:
-        if EP == 1:
-            dict_choices['loc_proxy_model'] = '../ML_proxy/trained_models_MPC/20240506_eff90_MPC_EP1_realData_100k_avgInput_MSEvar50/config_63'
-        elif EP == 4:
-            dict_choices['loc_proxy_model'] = '../ML_proxy/trained_models_MPC/20240506_eff90_MPC_EP4_realData_100k_avgInput_MSEvar50/config_44'
-        else:
-            ValueError(f'EP {EP} not valid')
-
-    else:
-        if EP == 1:
-            dict_choices['loc_proxy_model'] = '../ML_proxy/trained_models/20240408_eff90_DA_EP1_realData_10k_avgInput_MSEvar25/config_12'
-        elif EP == 4:
-            dict_choices['loc_proxy_model'] = '../ML_proxy/trained_models/20240408_eff90_DA_EP4_realData_10k_avgInput_MSEvar50/config_12'
-        elif EP == 8:
-            dict_choices['loc_proxy_model'] = '../ML_proxy/trained_models/20240408_eff90_DA_EP8_realData_10k_avgInput_relAbsError10/config_23'
-        elif EP == 12:
-            dict_choices['loc_proxy_model'] = '../ML_proxy/trained_models/20240408_eff90_DA_EP12_realData_10k_avgInput_MSEvar25/config_12'
-        elif EP == 24:
-            dict_choices['loc_proxy_model'] = '../ML_proxy/trained_models/20240408_eff90_DA_EP24_realData_10k_avgInput_MSEvar50/config_11'
-        else:
-            ValueError(f'EP {EP} not valid')
-
-
-        if fw == 'proxy_direct':
-            dict_choices['loc_proxy_model'] = f'../ML_proxy/trained_models/20240524_DA_cyclic_EP{EP}_extended_3dist_cov_high_eff90_realData_10k_direct/'
-        elif fw == 'proxy_direct_linear':
-            dict_choices['loc_proxy_model'] = f'../ML_proxy/trained_models/20240524_DA_cyclic_EP{EP}_extended_3dist_cov_high_eff90_realData_10k_direct_linear/'
-
-
-
-
-    if fw == 'ID':
-        repair_list = [repair_list[0]]
-    dict_choices['repair_list'] = repair_list
-
-    dict_choices['repair_str'] = ""
-    for r in repair_list:
-        dict_choices['repair_str']+= f"_{r}"
-
-
-    if test_WS:
-        dict_choices['gammastr'] = 'test_WS'
-        dict_choices['gamma'] = [0.1, 0.3, 1, 3, 10, 30]
-
-    return dict_choices
-
-
-
 
 
 if __name__ == '__main__':
@@ -246,8 +88,6 @@ if __name__ == '__main__':
     del_models = True
     repair_list = ["nn","ns","gg"]
 
-    dict_choices = get_dict_choices(fw,smoothing,loss_fct,MPC,indepthLoss,warmStart,EP,manyGamma,repair_list,test_WS)
-
     repitition = 1
     la=10
     lb=8
@@ -259,29 +99,6 @@ if __name__ == '__main__':
     overwrite_OP_params_proxy = False #CHECK WHAT THE HELL HAPPENS IF YOU TAKE TRUE
 
 
-    # dict_hps = {
-    #     # Dictionary of hyperparameters (which are the keys) where the list are the allowed values the HP can take
-    #     'strategy': 'grid_search',
-    #     'type': ['LSTM_ED_Attention'], #'vanilla', 'vanilla_separate', 'RNN_decoder', 'LSTM_ED', 'LSTM_ED_Attention' or 'ED_Transformer'
-    #     'reg': [0],  # [0,0.01],
-    #     'batch_size': [64],  # [8,64],
-    #     'lr': [0.0003,0.0001,0.00005],
-    #     'loss_fct_str': dict_choices['loss_fct'],
-    #     'list_units': [[64]], #[[64,32]]
-    #     'list_act': [['relu']],  #[['elu','relu']]  [['softplus']]
-    #     'hidden_size_lstm': [128], #ED
-    #     'layers': [4], #ED and transformer; For MPC: 2, for DA: 4
-    #     'dropout': [0],
-    #     'pen_feasibility': [0],
-    #     'gamma': dict_choices['gamma'],
-    #     'smoothing': dict_choices['smoothing_fct'], #'logBar' or 'quadratic' or 'quadratic_symm' or 'logistic'
-    #     'framework': [dict_choices['fw']], #'ID' or 'GS_proxy'
-    #     'include_soc_smoothing': dict_choices['include_soc_smoothing'], #Only has effect on ID
-    #     #'repair_proxy_feasibility': dict_choices['repair_feas'],
-    #     'repair': dict_choices['repair_list'],
-    #     'warm_start': dict_choices['warmStart']
-    # }
-
     dict_hps = {
         # Dictionary of hyperparameters (which are the keys) where the list are the allowed values the HP can take
         'strategy': 'grid_search',
@@ -289,19 +106,13 @@ if __name__ == '__main__':
         'reg': [0],  # [0,0.01],
         'batch_size': [8],  # [8,64],
         'lr': [0.0001],  # [0.000005,0.00005],
-        'loss_fct_str': dict_choices['loss_fct'],
+        'loss_fct_str': ['mse'],
         'list_units': [[64]], #[[64,32]]
         'list_act': [['relu']],  #[['elu','relu']]  [['softplus']]
         'hidden_size_lstm': [128], #ED
         'layers': [4], #ED and transformer; For MPC: 2, for DA: 4
         'dropout': [0],
-        'pen_feasibility': [0],
-        'gamma': [1],
-        'smoothing': [smoothing], #'logBar' or 'quadratic' or 'quadratic_symm' or 'logistic'
-        'framework': [fw], #'ID' or 'GS_proxy',
-        'include_soc_smoothing': [False], #Only has effect on ID
-        'repair': ['gg'],
-        'warm_start': dict_choices['warmStart']
+        'warm_start': [False],
     }
 
     hp_trans = {
@@ -344,7 +155,7 @@ if __name__ == '__main__':
         # What type of schedule to use as labels: "net_discharge" or "extended" (latter being stack of d,c,soc)
         'reg_type': 'quad',  # 'quad' or 'abs',
         #'loss_params': {'la': la, 'loc_preds': 1, 'loc_labels': 0},
-        'loss_fcts_eval_str': dict_choices['loss_fcts'], # loss functions to be tracked during training procedure, ['profit','mse_price','mse_sched','mse_sched_sm','mse_mu']
+        'loss_fcts_eval_str': ['mse'], # loss functions to be tracked during training procedure, ['profit','mse_price','mse_sched','mse_sched_sm','mse_mu']
         #'require_mu': True,
         'include_loss_evol_smooth': False,
         'exec': 'seq',  # 'seq' or 'par'
@@ -382,60 +193,29 @@ if __name__ == '__main__':
 
     # Old way of loading data:
 
+
+
     data_dict = {
-        'data_file_loc': "../../data_preprocessing/data_scaled.h5",
-        'read_cols_past_ctxt': ['SI','PV_act','PV_fc','wind_act', 'wind_fc','load_act', 'load_fc'],
-        'read_cols_fut_ctxt': ['PV_fc','wind_fc','Gas_fc', 'Nuclear_fc','load_fc'],
-        'cols_temp': ['working_day','month_cos','month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
-        'target_col': 'SI', #Before: "Frame_SI_norm"
-        'datetime_from': datetime(2018,1,1,0,0,0),
-        'datetime_to': datetime(2022,1,1,0,0,0),
-        'list_quantiles': [0.01,0.05,0.1,0.25,0.5,0.75,0.9,0.95,0.99],
-        'tvt_split': [2/4,1/4,1/4],
+        'data_file_loc': os.path.join(current_dir,'..','..','..','data_preprocessing','data_qh_SI_imbPrice_scaled_alpha.h5'),
+        'read_cols_past_ctxt': ['Imb_price', 'SI', 'PV_act', 'PV_fc', 'wind_act', 'wind_fc', 'load_act', 'load_fc'] + [f"-{int((i + 1) * 100)}MW" for i in range(3)] + [f"{int((i + 1) * 100)}MW" for i in range(3)],
+        'read_cols_fut_ctxt': ['PV_fc', 'wind_fc', 'Gas_fc', 'Nuclear_fc', 'load_fc'] + [f"-{int((i + 1) * 100)}MW" for i in range(10)] + [f"{int((i + 1) * 100)}MW" for i in range(10)],
+        'cols_temp': ['working_day', 'month_cos', 'month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
+        'target_col': 'Imb_price',  # Before: "Frame_SI_norm"
+        'datetime_from': datetime(2019, 1, 1, 0, 0, 0),
+        'datetime_to': datetime(2020, 12, 30, 0, 0, 0),
+        'list_quantiles': [0.5],
+        'list_quantiles_SI': [0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
+        'tvt_split': [5/6, 1/12, 1/12],
         'lookahead': la,
         'lookback': lb,
-        'split_val_test': 20, #split up forward pass on validation & test set to avoid memory issues
-        'loc_scaler': "../../scaling/Scaling_values.xlsx",
-        "unscale_labels":True,
+        'dev': dev,
+        'adjust_alpha': False,
+        'loc_scaler': os.path.join(current_dir, '..', '..', '..', 'scaling', 'Scaling_values.xlsx'),
+        "unscale_labels": True,
     }
 
-    df_past_ctxt = fdp.read_data_h5(input_dict=data_dict, mode='past')  # .drop(["FROM_DATE"],axis=1)
-    df_fut_ctxt = fdp.read_data_h5(input_dict=data_dict, mode='fut')  # .drop(["FROM_DATE"],axis=1)
-    df_temporal = fdp.get_temporal_information(data_dict)
+    data_np, data = ld.load_data_MPC(la=la, lb=lb, dev=dev, data_dict=data_dict, limit_train_set=20)
 
-    array_past_ctxt = df_past_ctxt.to_numpy()
-    array_fut_ctxt = df_fut_ctxt.to_numpy()
-    array_temp = df_temporal.to_numpy()
-
-    # Extend arrays (for RNN input)
-    array_ext_past_ctxt, array_ext_fut_ctxt, array_ext_past_temp, array_ext_fut_temp = fdp.get_3d_arrays(
-        past_ctxt=array_past_ctxt, fut_ctxt=array_fut_ctxt, temp=array_temp, input_dict=data_dict)
-    labels_ext = fdp.get_3d_arrays_labels(labels=df_past_ctxt, input_dict=data_dict)
-
-    array_ext_past = np.concatenate((array_ext_past_ctxt, array_ext_past_temp), axis=2)
-    array_ext_fut = np.concatenate((array_ext_fut_ctxt, array_ext_fut_temp), axis=2)
-
-    feat_train, feat_val, feat_test = fdp.get_train_val_test_arrays([array_ext_past, array_ext_fut], data_dict)
-    lab_train, lab_val, lab_test = fdp.get_train_val_test_arrays([labels_ext], data_dict)
-    # list_arrays = [feat_train,lab_train,feat_val,lab_val,feat_test,lab_test]
-
-    data_np = {
-        'train': (feat_train,lab_train),
-        'val': (feat_val,lab_val),
-        'test': (feat_test, lab_test)
-    }
-
-    data = {
-        'train': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_train],
-                  [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_train]),
-        'val': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_val],
-                [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_val]),
-        'test': ([torch.from_numpy(f).to(torch.float32).to(dev) for f in feat_test],
-                 [torch.squeeze(torch.from_numpy(l).to(torch.float32)).to(dev) for l in lab_test]),
-    }
-
-
-    data_dict = {}
 
 
     nn_dict['input_size_e'] = data_np['train'][0][0].shape[2]
