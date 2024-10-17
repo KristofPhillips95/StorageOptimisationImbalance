@@ -14,7 +14,7 @@ os.chdir(cwd)
 def import_quarter_hourly_data_load(config_parameters):
     # Ecritrue fichier CSV
     #file_xlsx = r'''file csv\DATA Elia\Load\Global_data_quarter_hourly.xlsx'''
-    file_xlsx = f"C:/Users/u0137781/OneDrive - KU Leuven/data/SI_forecasting/Elia/Load/Global_data_quarter_hourly.xlsx"
+    file_xlsx = f"{config_parameters['loc_data'][0]}/Elia/Load/Global_data_quarter_hourly.xlsx"
 
     file_h5 = config_parameters['file_h5'][0]
 
@@ -35,7 +35,7 @@ def import_quarter_hourly_data_load(config_parameters):
         df_1_hourly = pd.DataFrame()  # Instantiating a dataframe to save data over one excel file
         n_year = dates_loop[i].year
         #file_real_value = r'''file csv\DATA Elia\Load\Total_load_'''+str(n_year)+'''.xlsx'''
-        file_real_value = f"C:/Users/u0137781/OneDrive - KU Leuven/data/SI_forecasting/Elia/Load/Total_load_{n_year}.xlsx"
+        file_real_value = f"{config_parameters['loc_data'][0]}/Elia/Load/Total_load_{n_year}.xlsx"
 
 
         if os.path.isfile(file_real_value)==True:
@@ -62,7 +62,7 @@ def import_quarter_hourly_data_load(config_parameters):
             file_real_value_unprocessed.rename(columns={0: "Total_Load"},inplace=True) #Renaming the column to Total_Load
             percent_missing = file_real_value_unprocessed.isnull().sum() * 100 / len(file_real_value_unprocessed) # percentage of missing data per column
             print( 'Missing data (%) : Total_load_ '+str(round(percent_missing['Total_Load'],2)) )
-            file_real_value_unprocessed = file_real_value_unprocessed.resample('15T').mean().interpolate(limit_direction='both') # Deals with spring hour and fall hour.
+            file_real_value_unprocessed = file_real_value_unprocessed.resample('15min').mean().interpolate(limit_direction='both') # Deals with spring hour and fall hour.
             for date_dst_fall in DST_in_fall:
                 if date_dst_fall in file_real_value_unprocessed.index.get_level_values('period'):
                     print('OK ') # resample seems to do the job for removing the added hour in fall
@@ -84,7 +84,7 @@ def import_quarter_hourly_data_load(config_parameters):
 
 
         file_forecasted_value = r'''file csv\DATA Elia\Load\Total_load_forecast_'''+str(n_year)+'''.xls''' # Begins at 09-08-2014
-        file_forecasted_value = f"C:/Users/u0137781/OneDrive - KU Leuven/data/SI_forecasting/Elia/Load/Total_load_forecast_{n_year}.xls"
+        file_forecasted_value = f"{config_parameters['loc_data'][0]}/Elia/Load/Total_load_forecast_{n_year}.xls"
 
         if os.path.isfile(file_forecasted_value)==True:
             # Load excel file_forecasted_value
@@ -106,7 +106,7 @@ def import_quarter_hourly_data_load(config_parameters):
             print( 'Missing data (%) : Total_load_forecast_ '+str(round(percent_missing['Total_Load'],2)) )
             if percent_missing['Total_Load'] > 30: #If missing values over 30%
                 file_forecasted_value_unprocessed.fillna(file_real_value_unprocessed, inplace=True)
-            file_forecasted_value_unprocessed = file_forecasted_value_unprocessed.resample('15T').mean().interpolate(limit_direction='both') # Deals with spring hour and fall hour.
+            file_forecasted_value_unprocessed = file_forecasted_value_unprocessed.resample('15min').mean().interpolate(limit_direction='both') # Deals with spring hour and fall hour.
             for date_dst_fall in DST_in_fall:
                 if date_dst_fall in file_forecasted_value_unprocessed.index.get_level_values('period'):
                     print('OK ') # resample seems to do the job for removing the added hour in fall
@@ -118,7 +118,7 @@ def import_quarter_hourly_data_load(config_parameters):
             file_forecasted_value_unprocessed_quarter_hourly = file_forecasted_value_unprocessed.copy()
 
             df_1_quarter_hourly = df_1_quarter_hourly.assign(Total_Load_forecasted_values=file_forecasted_value_unprocessed_quarter_hourly['Total_Load'].values)
-            df_quarter_hourly = df_quarter_hourly.append(df_1_quarter_hourly, ignore_index=True)
+            df_quarter_hourly = df_quarter_hourly._append(df_1_quarter_hourly, ignore_index=True)
 
         else:
             print('This file doesn t exist', file_forecasted_value)

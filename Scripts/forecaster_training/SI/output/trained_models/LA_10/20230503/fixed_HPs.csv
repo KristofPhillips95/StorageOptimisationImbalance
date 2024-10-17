@@ -1,4 +1,0 @@
-input_size_e,hidden_size_lstm,input_size_d,input_size_past_t,input_size_fut_t,output_dim,config
-3,32,4,1,1,9,1
-3,64,4,1,1,9,2
-3,128,4,1,1,9,3

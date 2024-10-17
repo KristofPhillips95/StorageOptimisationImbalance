@@ -93,7 +93,7 @@ def import_hourly_data_processing_Day_Ahead_market(config_parameters):
         for i in range(len(Year)):
             print(Year[i])
             file = r'''file csv\DATA entsoe transparency platform\Day Ahead market'''+name_file[j]+'''\Day-ahead Prices_''' + str(Year[i]) + '''.xlsx'''
-            file = f"C:/Users/u0137781/OneDrive - KU Leuven/data/SI_forecasting/ENTSOE/Day Ahead market/Belgium (BE)/Day-ahead Prices_{Year[i]}.xlsx"
+            file = f"{config_parameters['loc_data'][0]}/ENTSOE/Day Ahead market/Belgium (BE)/Day-ahead Prices_{Year[i]}.xlsx"
 
             # Load excel file
             file_unprocessed=pd.read_excel(file, header=None, skiprows=6, engine = 'openpyxl')
@@ -149,7 +149,7 @@ def import_hourly_data_processing_Day_Ahead_market(config_parameters):
         print('Missing data (%) : DA Prices ' + str(round(percent_missing['Day-ahead Price [€\MWh]'], 2)))
 
         file_xlsx = r'''file csv\DATA entsoe transparency platform\Day Ahead market\Belgium (BE)\Global_data.xlsx'''
-        file_xlsx = f"C:/Users/u0137781/OneDrive - KU Leuven/data/SI_forecasting/ENTSOE/Day Ahead market/Belgium (BE)/Global_data.xlsx"
+        file_xlsx = f"{config_parameters['loc_data'][0]}/ENTSOE/Day Ahead market/Belgium (BE)/Global_data.xlsx"
         #file_xlsx = r'''file csv\DATA Elia\RES\\Wind Total\Global_data.xlsx'''
 
         #Ecritrue fichier xlsx

@@ -18,7 +18,7 @@ def retrieve_name(key, col, dict_col_rename):
 df_scaling = pd.read_excel("Scaling_values.xlsx")
 
 
-loc = "data_qh_SI_imbPrice.h5"
+loc = "h5_files/20240910_SI.h5"
 f = h5py.File(loc)
 ks = f.keys()
 
@@ -82,7 +82,7 @@ dict_cols = {
     "Global_data_generation_produced":["Gas","Nuclear","Water"],
     "Total_Load":["Total_Load_real_values", "Total_Load_forecasted_values"],
     "data_ELIA_flow":["BEDE","BEFR","BELU","BENL","BEUK","Net_Position"],
-    "DATA_ELIA_MO": [f"-{int(100*(i+1))}MW" for i in range(10)] + [f"{int(100*(i+1))}MW" for i in range(10)]
+    #"DATA_ELIA_MO": [f"-{int(100*(i+1))}MW" for i in range(10)] + [f"{int(100*(i+1))}MW" for i in range(10)]
 }
 
 
@@ -112,8 +112,14 @@ for key,cols in dict_cols.items():
 
 
 
+df_large_filtered = df_large[df_large.index < pd.to_datetime('2024-01-01')]
+rows_with_missing_values = df_large_filtered[df_large_filtered.isnull().any(axis=1)]
+
 
 
 df_large.to_hdf("data_qh_SI_imbPrice_scaled_alpha.h5",key="data",mode="w")
+
+
+
 
 x=1

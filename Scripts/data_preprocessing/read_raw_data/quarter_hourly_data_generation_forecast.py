@@ -50,7 +50,7 @@ def import_quarter_hourly_data_forecast_generation(config_parameters):
                 file_unprocessed_sheet.drop(['mm', 'Unnamed: 3', 'yyyy', 'Unnamed: 6', 'Unnamed: 5', 'Unnamed: 2', 'dd','Date',], axis=1, inplace=True)
                 if "*2:00 -> *2:15" in file_unprocessed_sheet.columns:
                     file_unprocessed_sheet.drop(["*2:00 -> *2:15", "*2:15 -> *2:30", "*2:30 -> *2:45",'*2:45 -> *3:00'], axis=1,inplace=True)  # Removing the added hour in fall
-                file_unprocessed_sheet = file_unprocessed_sheet.stack(dropna=False)  # Multiple index of date (%Y/%M/%D) and hour (%H/%M) as index
+                file_unprocessed_sheet = file_unprocessed_sheet.stack(future_stack=True)  # Multiple index of date (%Y/%M/%D) and hour (%H/%M) as index
                 file_unprocessed_sheet = file_unprocessed_sheet.reset_index(level=[0, 1])
                 file_unprocessed_sheet["period"] = file_unprocessed_sheet["Date"]+ " " + file_unprocessed_sheet["level_1"].str.split(' ').str[0]  # create a timestamp in a correct format
                 file_unprocessed_sheet.drop(['Date', 'level_1'], axis=1, inplace=True)  # remove useless columns
@@ -59,7 +59,7 @@ def import_quarter_hourly_data_forecast_generation(config_parameters):
                 file_unprocessed_sheet.rename(columns={0: name_production},inplace=True)  # Renaming the column to Total_Load
                 percent_missing = file_unprocessed_sheet.isnull().sum() * 100 / len(file_unprocessed_sheet)  # percentage of missing data per column
                 print('Missing data (%) : '+name_production+' '+ str(round(percent_missing[name_production], 2)))
-                file_unprocessed_sheet = file_unprocessed_sheet.resample('15T').mean().interpolate(limit_direction='both')  # Deals with spring hour and fall hour.
+                file_unprocessed_sheet = file_unprocessed_sheet.resample('15min').mean().interpolate(limit_direction='both')  # Deals with spring hour and fall hour.
                 for date_dst_fall in DST_in_fall:
                     if date_dst_fall in file_unprocessed_sheet.index.get_level_values('period'):
                         print('OK ')  # resample seems to do the job for removing the added hour in fall
@@ -74,7 +74,7 @@ def import_quarter_hourly_data_forecast_generation(config_parameters):
             #                                           file_unprocessed_all_sheet[production[4]] + file_unprocessed_all_sheet[production[5]]
             file_unprocessed_all_sheet['FROM_DATE'] = [dates_loop[i] + timedelta(days=0, hours=0, minutes=15 * mul_min, seconds=0) for mul_min in range(file_unprocessed_sheet.shape[0])]
             file_unprocessed_all_sheet["TO_DATE"]=[dates_loop[i] + timedelta(days=0, hours=0, minutes=15 + 15 * mul_min, seconds=0) for mul_min in range(file_unprocessed_sheet.shape[0])]
-            df = df.append(file_unprocessed_all_sheet, ignore_index=True, sort=True)
+            df = df._append(file_unprocessed_all_sheet, ignore_index=True, sort=True)
             print(df.shape)
         else:
             print('This file doesn t exist',file)
@@ -165,7 +165,7 @@ def import_quarter_hourly_data_produced_generation(config_parameters):
                 file_unprocessed_all_sheet['FROM_DATE'] = [dates_loop[i] + timedelta(days=0, hours=0, minutes=15 * mul_min, seconds=0) for mul_min in range(file_unprocessed_sheet.shape[0])]
                 file_unprocessed_all_sheet["TO_DATE"]=[dates_loop[i] + timedelta(days=0, hours=0, minutes=15 + 15 * mul_min, seconds=0) for mul_min in range(file_unprocessed_sheet.shape[0])]
 
-                df = df.append(file_unprocessed_all_sheet, ignore_index=True,sort=True)
+                df = df._append(file_unprocessed_all_sheet, ignore_index=True,sort=True)
                 print(df.shape)
             else:
                 print('This file doesn t exist',file)
@@ -192,7 +192,7 @@ def import_quarter_hourly_data_produced_generation(config_parameters):
                     dt_row = DST_spring_2021 + timedelta(days = 0, hours = 2, minutes = 15*qh)
                     row_values = [avg_gas,avg_nuclear,avg_water,0,0,dt_row]
                     row_series = pd.Series(row_values,index=file_unprocessed_all_sheet.columns)
-                    file_unprocessed_all_sheet = file_unprocessed_all_sheet.append(row_series,ignore_index=True)
+                    file_unprocessed_all_sheet = file_unprocessed_all_sheet._append(row_series,ignore_index=True)
 
             file_unprocessed_all_sheet.sort_values(by='period', inplace=True)
             file_unprocessed_all_sheet.set_index('period', inplace=True)
@@ -200,7 +200,7 @@ def import_quarter_hourly_data_produced_generation(config_parameters):
             file_unprocessed_all_sheet['FROM_DATE'] = [dates_loop[i] + timedelta(days=0, hours=0, minutes=15 * mul_min, seconds=0) for mul_min in range(file_unprocessed_all_sheet.shape[0])]
             file_unprocessed_all_sheet["TO_DATE"] = [dates_loop[i] + timedelta(days=0, hours=0, minutes=15 + 15 * mul_min, seconds=0) for mul_min in range(file_unprocessed_all_sheet.shape[0])]
 
-            df = df.append(file_unprocessed_all_sheet, ignore_index=True, sort=True)
+            df = df._append(file_unprocessed_all_sheet, ignore_index=True, sort=True)
             print(df.shape)
 
 

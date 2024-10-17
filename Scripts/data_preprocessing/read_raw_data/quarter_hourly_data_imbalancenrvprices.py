@@ -16,7 +16,7 @@ def import_quarter_hourly_data_imbalancenrvprices(config_parameters):
     end_trainingData = config_parameters['end_trainingData'][0]
     df = pd.DataFrame(columns=['FROM_DATE', 'TO_DATE'], dtype=float) # Instantiating a dataframe to save data over the excel files
     #file_xlsx =r'''file csv\DATA Elia\imbalancenrvprices\Global_data.xlsx'''
-    file_xlsx = f"C:/Users/u0137781/OneDrive - KU Leuven/data/SI_forecasting/Elia/imbalancenrvprices/Global_data.xlsx"
+    file_xlsx = f"{config_parameters['loc_data'][0]}/Elia/imbalancenrvprices/Global_data.xlsx"
     file_h5 = config_parameters['file_h5'][0]
 
     #Time change in spring
@@ -32,7 +32,7 @@ def import_quarter_hourly_data_imbalancenrvprices(config_parameters):
         n_year = dates_loop[i].year
         n_month = '{:02d}'.format(dates_loop[i].month)
         file_R2 = r'''file csv\DATA Elia\imbalancenrvprices\Imbalance-'''+str(n_year)+'''-'''+str(n_month)+'''.xls'''
-        file_R2 = f"C:/Users/u0137781/OneDrive - KU Leuven/data/SI_forecasting/Elia/imbalancenrvprices/Imbalance-{n_year}-{n_month}.xls"
+        file_R2 = f"{config_parameters['loc_data'][0]}/Elia/imbalancenrvprices/Imbalance-{n_year}-{n_month}.xls"
 
         if os.path.isfile(file_R2) == True:
             file_unprocessed = pd.read_excel(file_R2, header=0, skiprows=1)
@@ -52,7 +52,7 @@ def import_quarter_hourly_data_imbalancenrvprices(config_parameters):
                    ', ACE '+str(round(percent_missing['ACE'],2)) +\
                    ', Imb_price '+str(round(percent_missing['Imb_price'],2))
                    )
-            file_unprocessed = file_unprocessed.resample('15T').mean().interpolate(limit_direction='both') # Deals with spring hour and fall hour.
+            file_unprocessed = file_unprocessed.resample('15min').mean().interpolate(limit_direction='both') # Deals with spring hour and fall hour.
             for date_dst_fall in DST_in_fall:
                 if date_dst_fall in file_unprocessed.index.get_level_values('period'):
                     print('OK ') # resample seems to do the job for removing the added hour in fall
