@@ -31,6 +31,7 @@ function App_API() {
     useDataEffect("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items", setData);
     useDataEffect("https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/lts_items", setData_lts);
     console.log(data_lts)
+    console.log(data)
     
   const imba_chart_2 = prepareChart(data,"Imba")
   const price_chart_2 = prepareChart(data,"Price")
@@ -46,7 +47,7 @@ function App_API() {
     ];
   
 
-    if (data === null) {
+    if (data === null || data_lts === null) {
       return <div>Loading...</div>;
     }
     return (

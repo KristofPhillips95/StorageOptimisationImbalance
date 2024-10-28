@@ -38,7 +38,7 @@ function processLtsData(data_lts){
   values = [
     { name: 'Charge cost', day: todayCharge, week: thisWeekCharge,month: thisMonthCharge },
     { name: 'Discharge revenue', day: todayDisCharge, week: thisWeekDisCharge,month: thisMonthDisCharge },
-    { name: 'Profit', day: todayDisCharge- todayCharge, week: thisWeekCharge-thisWeekDisCharge,month: thisMonthCharge-thisMonthDisCharge },
+    { name: 'Profit', day: todayDisCharge- todayCharge, week: thisWeekDisCharge - thisWeekCharge,month: thisMonthDisCharge - thisMonthCharge },
     // Add other specific numbers related to your data
   ];
   return values
@@ -53,7 +53,7 @@ function summedExposureSince(data_lts,startDate,exposureType){
     return item_date >= parsedStartDate
    } )
   const summedProduct = calculate_summed_product(data_since_start,exposureType)
-  return summedProduct
+  return summedProduct.toFixed(1)
 }
 
 function calculate_summed_product(data,exposureType){
