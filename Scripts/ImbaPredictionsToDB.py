@@ -73,6 +73,8 @@ data_2 = {
     "soc": data["soc"][0],
     "charge": data["charge"][0],
     "discharge": data["discharge"][0],
+    "prev_total_d_rev": 0,
+    "prev_total_c_cost": 0
 }
 
 # curr_qh_dt =  datetime.datetime.strptime(data["curr_qh"], time_format).replace(tzinfo=datetime.timezone.utc)
