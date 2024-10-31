@@ -98,11 +98,12 @@ def get_new_unknown_time(data):
     return datetime.strptime(data["curr_qh"], time_format).replace(tzinfo=timezone.utc)
 
 def get_imba_price(ts):
-    before = ts - dt.timedelta(minutes=15)
-    after = ts + dt.timedelta(minutes=15)
-    frame_price = dea.get_specific_df(datapoint="SI_and_price",start=before,end=after)
-
-    return frame_price[frame_price["datetime"] == ts]["positiveimbalanceprice"].item()
+    # before = ts - dt.timedelta(minutes=15)
+    # after = ts + dt.timedelta(minutes=15)
+    # frame_price = dea.get_specific_df(datapoint="SI_and_price",start=before,end=after)
+    #
+    # return frame_price[frame_price["datetime"] == ts]["positiveimbalanceprice"].item()
+    return 0
 
 # def get_imba(ts):
 #     # TODO fetch imba from Elia API

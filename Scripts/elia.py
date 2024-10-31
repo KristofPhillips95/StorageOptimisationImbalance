@@ -284,7 +284,7 @@ class EliaPandasClient:
             end: dt.datetime | dt.date | pd.Timestamp = TODAY,
             **params) -> pd.DataFrame:
         """Returns the imbalance prices per 15min"""
-        dataset = "ods078"
+        dataset = "ods162"
         where_filter = self._construct_where_filter(**locals())
         params.update({"where": where_filter})
         df = self._execute_query(dataset, params)

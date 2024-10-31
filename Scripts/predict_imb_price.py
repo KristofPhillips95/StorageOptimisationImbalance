@@ -48,7 +48,7 @@ def get_most_recent(lookback=10):
     def get_most_recent(df,target):
         dict_target = {
             'SI': 'systemimbalance',
-            'imbPrice': 'positiveimbalanceprice'
+            'imbPrice': 'imbalanceprice'
         }
         df_sorted = df.sort_values(by='datetime',ascending=False)
         df_filtered = df_sorted[df_sorted['systemimbalance'].apply(lambda x: isinstance(x, float))]

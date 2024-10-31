@@ -1,7 +1,7 @@
 import requests
 from urllib.parse import quote
 
-api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/lts_items"
+api_link = "https://swdd9r1vei.execute-api.eu-north-1.amazonaws.com/items"
 response = requests.get(api_link)
 existing_data = response.json()
 
