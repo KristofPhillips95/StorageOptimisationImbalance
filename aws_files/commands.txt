@@ -7,6 +7,9 @@ ssh -i ~/.ssh/KristofFirstKeyP.pem ec2-user@ec2-51-20-137-138.eu-north-1.compute
 
 rsync --progress -e "ssh -i /home/u0138303/.ssh/KristofFirstKeyP.pem" OneDrive\ -\ KU\ Leuven/StorageOptimisationImbalance/Scripts/ ec2-user@ec2-51-20-137-138.eu-north-1.compute.amazonaws.com:~/StorageOptimImba/Scripts -anv 
 
+rsync --progress -e "ssh -i /home/u0138303/.ssh/KristofFirstKeyP.pem" ec2-user@ec2-51-20-137-138.eu-north-1.compute.amazonaws.com:~/StorageOptimImba/Scripts OneDrive\ -\ KU\ Leuven/StorageOptimisationImbalance/Scripts/ -anv 
+
+
 ############
 # NOHUP
 ############
