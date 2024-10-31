@@ -72,7 +72,7 @@ def load_data_DA(days_train=1000,last_ex_test=365,dev='cpu'):
 
 
 
-def load_data_MPC(la,lb,dev,data_dict,limit_train_set=None):
+def load_data_imbPrice(la,lb,dev,data_dict,limit_train_set=None):
 
     def sample_random_instances(list_arrays, n):
 

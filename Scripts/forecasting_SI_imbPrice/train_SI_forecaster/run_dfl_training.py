@@ -196,7 +196,7 @@ if __name__ == '__main__':
 
 
     data_dict = {
-        'data_file_loc': os.path.join(current_dir,'..','..','..','data_preprocessing','data_qh_SI_imbPrice_scaled_alpha.h5'),
+        'data_file_loc': os.path.join(current_dir,'..','data','processed_data','data_qh_SI_imbPrice_scaled_alpha.h5'),
         'read_cols_past_ctxt': ['Imb_price', 'SI', 'PV_act', 'PV_fc', 'wind_act', 'wind_fc', 'load_act', 'load_fc'] + [f"-{int((i + 1) * 100)}MW" for i in range(3)] + [f"{int((i + 1) * 100)}MW" for i in range(3)],
         'read_cols_fut_ctxt': ['PV_fc', 'wind_fc', 'Gas_fc', 'Nuclear_fc', 'load_fc'] + [f"-{int((i + 1) * 100)}MW" for i in range(10)] + [f"{int((i + 1) * 100)}MW" for i in range(10)],
         'cols_temp': ['working_day', 'month_cos', 'month_sin', 'hour_cos', 'hour_sin', 'qh_cos', 'qh_sin'],
@@ -210,7 +210,7 @@ if __name__ == '__main__':
         'lookback': lb,
         'dev': dev,
         'adjust_alpha': False,
-        'loc_scaler': os.path.join(current_dir, '..', '..', '..', 'scaling', 'Scaling_values.xlsx'),
+        'loc_scaler': os.path.join(current_dir, '..', '..', 'scaling', 'Scaling_values.xlsx'),
         "unscale_labels": True,
     }
 
@@ -247,7 +247,6 @@ if __name__ == '__main__':
         'degradation': False,
         'loc_proxy_params': f'../ML_proxy/OP/20240430_MPC_cyclic_EP{EP}_extended_3dist_cov_high_eff90_realData_100k.pkl',
         'overwrite_from_proxy': overwrite_OP_params_proxy,
-        'loc_proxy_model': dict_choices['loc_proxy_model'],
         'repair_proxy_feasibility': False #For calculation of optimal schedules, will be overwritten in hp_tuner()
     }
 
