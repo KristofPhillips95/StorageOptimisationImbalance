@@ -1,6 +1,11 @@
 
 Scripts/__pycache__/
+
 Scripts/train_SI_forecaster/output/trained_models/
+
+Scripts/forecaster_training/SI/output/trained_models/
+
+Scripts/forecasting_SI_imbPrice/data/processed_data/
 
 .idea/
 
@@ -11,5 +16,9 @@ Scripts/train_SI_forecaster/__pycache__/
 Scripts/scaling/__pycache__/
 
 Scripts/optimization/
+Scripts/data_preprocessing/data_qh_SI_imbPrice.h5
+Scripts/data_preprocessing/data_qh_SI_imbPrice_scaled.h5
+Scripts/data_preprocessing/data_qh_SI_imbPrice_scaled_alpha.h5
+Scripts/train_SI_forecaster_old/input_data_scaled.h5
 
 Scripts/nohup.out

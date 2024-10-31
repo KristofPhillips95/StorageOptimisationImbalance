@@ -1,0 +1,30 @@
+project-name/
+│
+├── data/                 # Raw and processed data (if small, for larger data, use cloud storage)
+│   ├── raw/
+│   ├── processed/
+│
+├── notebooks/            # Jupyter Notebooks for initial exploration, EDA, and prototyping
+│
+├── src/                  # Source code for data processing, modeling, and utilities
+│   ├── __init__.py
+│   ├── data/             # Data processing scripts and ETL logic
+│   ├── features/         # Feature engineering scripts
+│   ├── models/           # Model definition, training, and evaluation scripts
+│   ├── utils/            # Utility functions used across the project
+│   └── visualization/    # Scripts for data and model visualization
+│
+├── tests/                # Unit and integration tests
+│
+├── scripts/              # Standalone scripts for running tasks like data pipeline, training, etc.
+│
+├── config/               # Configuration files (e.g., YAML, JSON) for hyperparameters, paths, etc.
+│
+├── models/               # Directory for storing trained models and related artifacts
+│   ├── model_v1/
+│   ├── model_v2/
+│   └── ...
+│
+├── requirements.txt      # Dependencies for the project
+├── README.md             # Project documentation
+└── setup.py              # For setting up the package if making the codebase installable

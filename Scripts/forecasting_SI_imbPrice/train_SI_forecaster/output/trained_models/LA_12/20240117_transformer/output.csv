@@ -1,0 +1,1 @@
+config,train_loss,val_loss,test_loss,train_time,time_per_epoch,time_forward_per_epoch,time_loss_per_epoch,time_backward_per_epoch,time_val_per_epoch,hp_hidden_size_lstm,hp_layers_lstm,hp_lr,hp_batch_size,hp_reg,hp_list_units,hp_list_act,hp_encoder_size,hp_num_heads,hp_layers,hp_ff_dim,hp_dropout,hp_framework,hp_repair,hp_warm_start,hp_quantile_tensor

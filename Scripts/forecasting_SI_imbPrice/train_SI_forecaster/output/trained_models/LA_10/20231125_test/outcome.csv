@@ -1,0 +1,2 @@
+config,train_loss,val_loss,test_loss,input_size_e,hidden_size_lstm,layers_lstm,lr,input_size_d,output_dim
+1,76619731.90281907,504064.69975550653,622167.3937022781,14,64,1,0.001,12,9
